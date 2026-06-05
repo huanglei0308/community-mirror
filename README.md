@@ -17,7 +17,7 @@
 
 | 社区 | 源 | 目的 | 负责人 | 状态 |
 |------|-----|------|--------|------|
-| [openEuler](https://github.com/openeuler-mirror) | gitcode/openeuler | github/openeuler-mirror | @shinwell | [查看](https://openeuler-mirror.github.io/sync-config/results.json) |
+| [openEuler](https://github.com/openeuler-mirror) | gitcode/openeuler | github/openeuler-mirror | @huanglei0308 | [查看](https://openeuler-mirror.github.io/sync-config/results.json) |
 
 > 你的社区也在这里？见下方接入指南。
 
