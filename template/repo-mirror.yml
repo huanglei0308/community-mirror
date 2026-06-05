@@ -1,0 +1,66 @@
+name: Mirror repos to destination
+
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: '0 1 * * *'
+
+jobs:
+  mirror:
+    runs-on: ubuntu-latest
+    steps:
+    # --- Step 1: Get scripts from community-mirror Hub ---
+    - name: Checkout community-mirror (scripts)
+      uses: actions/checkout@v4
+      with:
+        repository: huanglei0308/community-mirror
+        path: _mirror-hub
+
+    # --- Step 2: Run hub-mirror-action ---
+    # Replace src / dst / account_type with your own values.
+    - name: Mirror repos
+      id: mirror
+      continue-on-error: true
+      uses: Yikun/hub-mirror-action@master
+      with:
+        src: gitcode/MY_ORG
+        dst: github/MY_ORG_MIRROR
+        src_token: ${{ secrets.SRC_TOKEN }}
+        dst_key: ${{ secrets.DST_PRIVATE_KEY }}
+        dst_token: ${{ secrets.DST_TOKEN }}
+        account_type: org
+        clone_style: ssh
+        force_update: true
+        # black_list: "repo1,repo2"
+        # static_list: "repo1,repo2"
+
+    # --- Step 3: Set up Python ---
+    - name: Set up Python
+      uses: actions/setup-python@v5
+      with:
+        python-version: '3.x'
+
+    # --- Step 4: Check sync status (uses Hub script) ---
+    - name: Check sync status
+      id: status
+      run: |
+        pip install requests
+        python _mirror-hub/scripts/check_sync_status.py \
+          --src gitcode/MY_ORG \
+          --dst github/MY_ORG_MIRROR \
+          --src-token "${{ secrets.SRC_TOKEN }}" \
+          --dst-token "${{ secrets.DST_TOKEN }}" \
+          --account-type org \
+          --output results.json
+
+    # --- Step 5: Deploy results.json to gh-pages ---
+    - name: Deploy results to gh-pages
+      uses: peaceiris/actions-gh-pages@v4
+      with:
+        github_token: ${{ secrets.GITHUB_TOKEN }}
+        publish_dir: .
+        publish_branch: gh-pages
+        keep_files: false
+        user_name: 'github-actions[bot]'
+        user_email: 'github-actions[bot]@users.noreply.github.com'
+        commit_message: 'Update sync results [skip ci]'

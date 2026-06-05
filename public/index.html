@@ -1,0 +1,78 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Community Mirror Hub</title>
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<div class="container">
+
+  <header class="header">
+    <h1>&#x1F504; Community Mirror Hub</h1>
+    <p class="subtitle">
+      跨社区开源仓库同步状态中心
+      &nbsp;&middot;&nbsp;
+      <a href="https://github.com/huanglei0308/community-mirror" target="_blank">GitHub</a>
+      &nbsp;&middot;&nbsp;
+      <a href="https://github.com/huanglei0308/community-mirror/blob/main/docs/setup-guide.md" target="_blank">接入指南</a>
+    </p>
+  </header>
+
+  <!-- Summary cards -->
+  <section class="summary-cards" id="summary-cards">
+    <div class="card info">
+      <div class="number" id="total-orgs">-</div>
+      <div class="label">Communities</div>
+    </div>
+    <div class="card info">
+      <div class="number" id="total-repos">-</div>
+      <div class="label">Total Repos</div>
+    </div>
+    <div class="card success">
+      <div class="number" id="total-success">-</div>
+      <div class="label">Synced</div>
+    </div>
+    <div class="card danger">
+      <div class="number" id="total-failed">-</div>
+      <div class="label">Failed</div>
+    </div>
+    <div class="card warn">
+      <div class="number" id="total-skipped">-</div>
+      <div class="label">Skipped</div>
+    </div>
+  </section>
+
+  <!-- Stale data warning -->
+  <div class="stale-warning" id="stale-warning">
+    &#x26A0; Some community data may be stale (over 36 hours old). Communities might need to re-run their sync workflows.
+  </div>
+
+  <!-- Filter tabs -->
+  <section class="filter-bar">
+    <button class="filter-btn active" data-filter="all">All</button>
+    <button class="filter-btn" data-filter="failed">&#x26A0; Has Failures</button>
+    <button class="filter-btn" data-filter="ok">&#x2705; All Good</button>
+  </section>
+
+  <!-- Community cards -->
+  <section id="community-list">
+    <div class="loading">Loading...</div>
+  </section>
+
+  <footer class="footer">
+    <p>
+      Powered by <a href="https://github.com/Yikun/hub-mirror-action" target="_blank">hub-mirror-action</a>
+      &nbsp;&middot;&nbsp;
+      Data refreshed when you load this page
+      &nbsp;&middot;&nbsp;
+      <span id="last-refresh"></span>
+    </p>
+  </footer>
+
+</div>
+
+<script src="app.js"></script>
+</body>
+</html>
