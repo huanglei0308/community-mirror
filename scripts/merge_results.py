@@ -50,9 +50,14 @@ def merge(existing: dict, current: dict) -> dict:
         for repo in existing.get(f"{status}_list", []):
             repo_status[repo] = status
 
-    # 2. Override with current workflow's results
+    # 2. Override with current workflow's results.
+    #    IMPORTANT: "skipped" means this workflow intentionally did NOT check
+    #    the repo (e.g. black_list, white_list).  It must NOT override an
+    #    existing "success" or "failed" status from another workflow.
     for status in ("success", "failed", "skipped"):
         for repo in current.get(f"{status}_list", []):
+            if status == "skipped" and repo_status.get(repo) not in (None, "skipped"):
+                continue  # keep existing success/failed from another workflow
             repo_status[repo] = status
 
     # 3. Merge diagnoses (current overrides for same repos)
