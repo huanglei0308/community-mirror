@@ -6,7 +6,7 @@
  * entirely in the browser — zero server-side secrets or tokens needed.
  */
 
-const CONFIG_URL = 'orgs.json';
+const CONFIG_URL = 'https://raw.githubusercontent.com/huanglei0308/community-mirror/main/config/orgs.json';
 const STALE_HOURS = 36; // warn if data is older than this
 
 // ── Helpers ────────────────────────────────────────────
