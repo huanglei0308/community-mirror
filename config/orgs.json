@@ -3,6 +3,14 @@
   "description": "跨社区开源仓库同步状态中心 — 由各社区自行运行，Hub 统一展示。",
   "repos": [
     {
+      "org": "openEuler",
+      "owner": "openeuler-mirror",
+      "contact": "huanglei0308",
+      "source": "gitcode/openeuler",
+      "destination": "github/openeuler-mirror",
+      "results_url": "https://openeuler-mirror.github.io/sync-config/results.json"
+    },
+    {
       "org": "My Test (lei0308)",
       "owner": "huanglei0308",
       "contact": "huanglei0308",
