@@ -54,7 +54,14 @@
 
 #### Step 2: 复制 workflow 模板
 
-将本仓库 [`template/repo-mirror.yml`](template/repo-mirror.yml) 复制到你的仓库的 `.github/workflows/` 目录下，修改以下内容：
+将以下两个文件复制到你的仓库：
+
+| 文件 | 位置 |
+|------|------|
+| [`template/repo-mirror.yml`](template/repo-mirror.yml) | `.github/workflows/repo-mirror.yml` |
+| [`template/update_readme.py`](template/update_readme.py) | `update_readme.py`（仓库根目录） |
+
+修改 workflow 中的以下内容：
 
 ```yaml
 # 改这三处
@@ -67,6 +74,8 @@ account_type: org                # org / user / group
 # black_list: "huge-repo"        # 不同步这些仓库
 # timeout: '1h'                  # 大仓库需要更长超时
 ```
+
+> ⚠️ **大型组织（>100 仓库）：** 模板默认使用**矩阵分批**策略，自动将仓库分成每批 80 个并行同步，避免单个 job 超时（GitHub Actions 6 小时限制）。小型组织可使用模板底部的单 job 精简版。
 
 支持的平台前缀：`github`、`gitee`、`gitcode`、`gitlab`
 
@@ -138,6 +147,9 @@ PR 合并后，你的社区会自动出现在 [仪表盘](https://huanglei0308.g
 **Q: 仪表盘显示 "NO DATA"?**
 → 确认 `results_url` 可公开访问，且 workflow 已成功部署到 gh-pages。
 
+**Q: 仓库太多（800+），一个 workflow 跑不完就被终止了（⚠️ 叹号）？**
+→ 这是 GitHub Actions 的 6 小时限制。模板已内置**矩阵分批**策略：自动拉取仓库列表 → 分成每批 80 个 → 多个 job 并行同步 → 最后汇总。无需额外配置。
+
 **Q: 我的仓库是私有的，results.json 会暴露吗?**
 → results.json 只包含仓库名和计数，不含源码，公开无安全风险。
 
@@ -176,9 +188,12 @@ community-mirror/
 ├── README.md               ← 你在这里
 ├── docs/setup-guide.md     ← 新社区接入教程
 ├── template/               ← 复制到你仓库就能用
-│   └── repo-mirror.yml
+│   ├── repo-mirror.yml     ← 支持分批的 workflow 模板
+│   └── update_readme.py    ← 更新 README 同步状态的脚本
 ├── scripts/                ← 所有社区复用
-│   └── check_sync_status.py
+│   ├── check_sync_status.py
+│   ├── diagnose_failures.py
+│   └── split_batches.py    ← 大型组织自动分批
 ├── config/
 │   └── orgs.json           ← 社区注册表 (接入时 PR 改这个)
 ├── public/                 ← gh-pages 仪表盘
