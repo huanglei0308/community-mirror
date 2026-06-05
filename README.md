@@ -40,11 +40,106 @@
 
 ## 我要接入同步
 
-→ **[3 步接入指南](docs/setup-guide.md)**
+→ 完整教程见 [docs/setup-guide.md](docs/setup-guide.md)
 
-1. 复制 `template/` 到你的仓库
-2. 填入你的 src/dst 和 Secrets
-3. 向本仓库提 PR 注册你的社区 — 在 `config/orgs.json` 加一行
+### Quick Start
+
+**前置条件：** 源平台和目标平台的账号、API Token、SSH 密钥对。
+
+---
+
+#### Step 1: 创建 sync-config 仓库
+
+在你的目标 GitHub 组织下创建一个仓库（建议命名 `sync-config`），用于存放同步 workflow 和展示同步状态。
+
+#### Step 2: 复制 workflow 模板
+
+将本仓库 [`template/repo-mirror.yml`](template/repo-mirror.yml) 复制到你的仓库的 `.github/workflows/` 目录下，修改以下内容：
+
+```yaml
+# 改这三处
+src: gitcode/YOUR_ORG           # 源，如 gitcode/openeuler
+dst: github/YOUR_ORG_MIRROR      # 目的，如 github/openeuler-mirror
+account_type: org                # org / user / group
+
+# 可选配置
+# static_list: "repo1,repo2"     # 只同步指定仓库
+# black_list: "huge-repo"        # 不同步这些仓库
+# timeout: '1h'                  # 大仓库需要更长超时
+```
+
+支持的平台前缀：`github`、`gitee`、`gitcode`、`gitlab`
+
+#### Step 3: 配置 Secrets
+
+在仓库 **Settings → Secrets and variables → Actions** 中添加：
+
+| Secret | 说明 |
+|--------|------|
+| `SRC_TOKEN` | 源平台 API Token（用于获取仓库列表。Gitcode/Gitee 需要，GitHub 公开仓库可不填） |
+| `DST_TOKEN` | 目标平台 API Token（用于创建仓库） |
+| `DST_PRIVATE_KEY` | SSH 私钥（对应公钥需配在源和目标平台） |
+
+#### Step 4: 配置 SSH 公钥
+
+生成一对 SSH 密钥（如果没有的话）：
+
+```bash
+ssh-keygen -t rsa -b 4096 -f ~/.ssh/mirror-key -N ""
+```
+
+- **公钥**（`mirror-key.pub`）添加到：
+  - 源平台：Gitcode → 设置 → SSH 密钥、Gitee → 设置 → SSH 公钥
+  - 目标平台：GitHub → Settings → SSH and GPG keys
+- **私钥**（`mirror-key`）内容作为 `DST_PRIVATE_KEY` Secret
+
+#### Step 5: 修改仓库设置
+
+⚠️ **以下两步很重要，缺一不可：**
+
+1. **Actions 写权限**：Settings → Actions → General → Workflow permissions → 选择 **"Read and write permissions"** → Save
+2. **GitHub Pages**：Settings → Pages → Source 选 **"Deploy from a branch"** → Branch 选 **`gh-pages`** → `/ (root)` → Save
+
+#### Step 6: 测试
+
+1. 确保仓库默认分支为 `main`
+2. 手动触发 workflow：Actions → **"Mirror repos"** → Run workflow
+3. 等 workflow 跑完，检查：
+   - 仓库 README 是否显示了同步状态
+   - `https://<your-org>.github.io/<repo>/results.json` 是否可访问
+
+#### Step 7: 注册到 Hub
+
+向本仓库的 [`config/orgs.json`](config/orgs.json) 添加你的社区信息并提 PR：
+
+```json
+{
+  "org": "你的社区名",
+  "owner": "目标 GitHub 组织名",
+  "contact": "负责人 GitHub 账号",
+  "source": "gitcode/my-org",
+  "destination": "github/my-org-mirror",
+  "results_url": "https://my-org.github.io/sync-config/results.json"
+}
+```
+
+PR 合并后，你的社区会自动出现在 [仪表盘](https://huanglei0308.github.io/community-mirror/) 和上方状态表中。
+
+---
+
+### 常见问题
+
+**Q: workflow 跑完报 "Permission denied to github-actions[bot]"?**
+→ 检查 **Step 5.1**，确保 Actions 有 Read and write permissions。
+
+**Q: Pages 部署报 submodule 错误?**
+→ 正常现象。确保 workflow 中 `publish_dir` 指向干净的 `_publish/` 目录。
+
+**Q: 仪表盘显示 "NO DATA"?**
+→ 确认 `results_url` 可公开访问，且 workflow 已成功部署到 gh-pages。
+
+**Q: 我的仓库是私有的，results.json 会暴露吗?**
+→ results.json 只包含仓库名和计数，不含源码，公开无安全风险。
 
 ## 如何工作？
 
