@@ -17,7 +17,7 @@
 
 | 社区 | 源 | 目的 | 负责人 | 状态 |
 |------|-----|------|--------|------|
-| My Test | gitcode/lei0308 | github/huanglei0308 | @huanglei0308 | [查看](https://huanglei0308.github.io/my-sync-test/results.json) |
+| My Test | gitcode/lei0308 | github/huanglei0308 | @huanglei0308 | [查看](https://github.com/huanglei0308/my-sync-test#sync-status) |
 
 > 你的社区也在这里？见下方接入指南。
 
