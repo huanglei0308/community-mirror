@@ -38,7 +38,7 @@ jobs:
             dst = r["destination"]
             rows.append(
                 f"| {r['org']} | {src} | {dst} | @{r.get('contact', 'N/A')} "
-                f"| [查看](https://github.com/{r['owner']}) |"
+                f"| [查看](https://github.com/{r['owner']}/sync-config#sync-status) |"
             )
 
         table = (
