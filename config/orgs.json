@@ -1,5 +1,14 @@
 {
   "title": "Community Mirror Hub",
   "description": "跨社区开源仓库同步状态中心 — 由各社区自行运行，Hub 统一展示。",
-  "repos": []
+  "repos": [
+    {
+      "org": "My Test (lei0308)",
+      "owner": "huanglei0308",
+      "contact": "huanglei0308",
+      "source": "gitcode/lei0308",
+      "destination": "github/huanglei0308",
+      "results_url": "https://huanglei0308.github.io/my-sync-test/results.json"
+    }
+  ]
 }
