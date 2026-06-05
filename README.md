@@ -19,7 +19,7 @@
 | 社区 | 源 | 目的 | 负责人 | 状态 |
 |------|-----|------|--------|------|
 | openEuler | gitcode/openeuler | github/openeuler-mirror | @huanglei0308 | [查看](https://github.com/openeuler-mirror) |
-| My Test | gitcode/lei0308 | github/huanglei0308 | @huanglei0308 | [查看](https://github.com/huanglei0308/my-sync-test#sync-status) |
+| My Test (lei0308) | gitcode/lei0308 | github/huanglei0308 | @huanglei0308 | [查看](https://github.com/huanglei0308) |
 <!-- COMMUNITY_TABLE_END -->
 
 > 你的社区也在这里？见下方接入指南。
