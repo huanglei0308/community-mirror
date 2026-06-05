@@ -13,7 +13,13 @@
 1. **对于有同步需求的社区** — 提供开箱即用的模板，3 步配置好自动同步
 2. **对于想了解同步状态的人** — 一个统一的仪表盘，展示所有社区的同步进展
 
-## 谁在用？
+## 实时同步状态
+
+<!-- STATUS_TABLE_START -->
+> Auto-updated when dashboard deploys.
+<!-- STATUS_TABLE_END -->
+
+## 已接入社区
 
 <!-- COMMUNITY_TABLE_START -->
 | 社区 | 源 | 目的 | 负责人 | 状态 |

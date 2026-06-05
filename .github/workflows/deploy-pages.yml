@@ -59,6 +59,53 @@ jobs:
         print("README.md updated from orgs.json")
         PYEOF
 
+    - name: Fetch community statuses and update README status section
+      run: |
+        pip install requests -q
+        python3 << PYEOF
+        import json, re, requests
+
+        with open("config/orgs.json") as f:
+            config = json.load(f)
+
+        status_lines = []
+        total_success = total_failed = total_repos = 0
+
+        for r in config["repos"]:
+            try:
+                resp = requests.get(r["results_url"], timeout=30)
+                if resp.status_code == 200:
+                    d = resp.json()
+                    s, f, t = d.get("success", 0), d.get("failed", 0), d.get("total", 0)
+                    total_success += s; total_failed += f; total_repos += t
+                    icon = "⚠️" if f > 0 else "✅"
+                    status_lines.append(f"| {icon} {r['org']} | {t} | {s} | {f} | {d.get('skipped', 0)} |")
+                else:
+                    status_lines.append(f"| ❓ {r['org']} | - | - | - | - |")
+            except Exception as e:
+                status_lines.append(f"| ❓ {r['org']} | - | - | - | - |")
+
+        overall = f"⚠️ **{total_failed} failed**" if total_failed else "✅ All synced"
+
+        status_section = f"""**Overall:** {overall} | **{len(config['repos'])}** communities | **{total_repos}** repos
+
+        | Community | Total | ✅ Synced | ❌ Failed | ⏭️ Skipped |
+        |-----------|------:|----------:|----------:|-----------:|
+        {chr(10).join(status_lines)}
+        """
+
+        with open("README.md") as f:
+            readme = f.read()
+
+        pattern = r"<!-- STATUS_TABLE_START -->.*<!-- STATUS_TABLE_END -->"
+        replacement = "<!-- STATUS_TABLE_START -->\n" + status_section + "\n<!-- STATUS_TABLE_END -->"
+        new_readme = re.sub(pattern, replacement, readme, flags=re.DOTALL)
+
+        with open("README.md", "w") as f:
+            f.write(new_readme)
+        print("README status section updated")
+        PYEOF
+
     - name: Commit updated README
       run: |
         git config user.name 'github-actions[bot]'
