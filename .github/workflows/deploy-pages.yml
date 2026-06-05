@@ -24,6 +24,53 @@ jobs:
     - name: Checkout
       uses: actions/checkout@v4
 
+    - name: Update README from orgs.json
+      run: |
+        python3 << PYEOF
+        import json, re
+
+        with open("config/orgs.json") as f:
+            config = json.load(f)
+
+        rows = []
+        for r in config["repos"]:
+            src = r["source"]
+            dst = r["destination"]
+            rows.append(
+                f"| {r['org']} | {src} | {dst} | @{r.get('contact', 'N/A')} "
+                f"| [查看](https://github.com/{r['owner']}) |"
+            )
+
+        table = (
+            "| 社区 | 源 | 目的 | 负责人 | 状态 |\\n"
+            "|------|-----|------|--------|------|\\n"
+            + "\\n".join(rows)
+        )
+
+        with open("README.md") as f:
+            readme = f.read()
+
+        pattern = r"<!-- COMMUNITY_TABLE_START -->.*<!-- COMMUNITY_TABLE_END -->"
+        replacement = "<!-- COMMUNITY_TABLE_START -->\\n" + table + "\\n<!-- COMMUNITY_TABLE_END -->"
+        new_readme = re.sub(pattern, replacement, readme, flags=re.DOTALL)
+
+        with open("README.md", "w") as f:
+            f.write(new_readme)
+        print("README.md updated from orgs.json")
+        PYEOF
+
+    - name: Commit updated README
+      run: |
+        git config user.name 'github-actions[bot]'
+        git config user.email 'github-actions[bot]@users.noreply.github.com'
+        git add README.md
+        if git diff --cached --quiet; then
+          echo "No changes to README"
+        else
+          git commit -m "Auto-update community table from orgs.json [skip ci]"
+          git push
+        fi
+
     - name: Deploy to GitHub Pages
       uses: peaceiris/actions-gh-pages@v4
       with:
