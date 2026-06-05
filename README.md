@@ -16,7 +16,13 @@
 ## 实时同步状态
 
 <!-- STATUS_TABLE_START -->
-> Auto-updated when dashboard deploys.
+**Overall:** ✅ All synced | **2** communities | **2** repos
+
+| Community | Total | ✅ Synced | ❌ Failed | ⏭️ Skipped |
+|-----------|------:|----------:|----------:|-----------:|
+| ✅ openEuler | 1 | 1 | 0 | 0 |
+| ✅ My Test (lei0308) | 1 | 1 | 0 | 0 |
+
 <!-- STATUS_TABLE_END -->
 
 ## 已接入社区
