@@ -89,6 +89,7 @@ jobs:
 
     - name: Check sync status (all repos)
       id: status
+      continue-on-error: true
       run: |
         pip install requests -q
         python _mirror-hub/scripts/check_sync_status.py \
@@ -109,6 +110,15 @@ jobs:
           --src-token "${{ secrets.SRC_TOKEN }}" \
           --dst-token "${{ secrets.DST_TOKEN }}" \
           --account-type org
+
+    - name: Merge with existing results on gh-pages
+      run: |
+        REPO=$(echo "${{ github.repository }}" | cut -d/ -f2)
+        MERGE_URL="https://${{ github.repository_owner }}.github.io/${REPO}/results.json"
+        echo "Merging with: $MERGE_URL"
+        python _mirror-hub/scripts/merge_results.py results.json \
+          --merge-url "$MERGE_URL" \
+          --output results.json
 
     - name: Update README with sync status
       run: python update_readme.py
@@ -181,6 +191,7 @@ jobs:
 #      - uses: actions/setup-python@v5
 #        with: { python-version: '3.x' }
 #      - name: Check sync status
+#        continue-on-error: true
 #        run: |
 #          pip install requests -q
 #          python _mirror-hub/scripts/check_sync_status.py \
@@ -193,6 +204,12 @@ jobs:
 #          python _mirror-hub/scripts/diagnose_failures.py results.json \
 #            --src gitcode/MY_ORG --dst github/MY_ORG_MIRROR \
 #            --src-token "$SRC_TOKEN" --dst-token "$DST_TOKEN" --account-type org
+#      - name: Merge with existing results on gh-pages
+#        run: |
+#          REPO=$(echo "${{ github.repository }}" | cut -d/ -f2)
+#          MERGE_URL="https://${{ github.repository_owner }}.github.io/${REPO}/results.json"
+#          python _mirror-hub/scripts/merge_results.py results.json \
+#            --merge-url "$MERGE_URL" --output results.json
 #      - name: Update README
 #        run: python update_readme.py
 #      - name: Commit README
