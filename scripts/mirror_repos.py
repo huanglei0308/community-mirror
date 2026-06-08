@@ -368,42 +368,98 @@ class Mirror:
 # ──────────────────────────────────────────────────────────────────────
 
 
-def _short_error(exc: Exception) -> str:
-    """Extract a concise but complete error message for README display.
+def _classify_error(exc: Exception) -> Dict[str, str]:
+    """Classify an exception into {'category': ..., 'message': ...} for clean display.
 
-    For multi-line git errors (RuntimeError wrapping subprocess stderr),
-    the most useful diagnostic is usually in lines containing "error:" or
-    "remote rejected" — strip out trace IDs and keep the actionable part.
-    Returns at most 400 chars, prioritizing the end of the message.
+    Categories (stable keys for grouping in README/dashboard):
+      large_file      — file exceeds GitHub 100 MB limit
+      push_protection — GH013 push protection (secret scanning)
+      hook_declined   — pre-receive hook rejected the push
+      branch_delete   — refusing to delete current/default branch
+      rate_limited    — secondary rate limit or content-creation block
+      repo_not_found  — source repo missing or inaccessible
+      clone_failed    — git clone failed (network, auth, timeout)
+      push_failed     — generic push rejection (catch-all)
+      unknown         — unclassified
     """
     if hasattr(exc, "stderr") and exc.stderr:
-        msg = exc.stderr.strip()
+        raw = exc.stderr.strip()
     else:
-        msg = str(exc).strip()
+        raw = str(exc).strip()
 
-    if not msg:
-        return type(exc).__name__
+    raw_lower = raw.lower()
 
-    # Collect lines that look like actual error messages
-    lines = msg.split("\n")
-    error_lines = [
-        l.strip() for l in lines
-        if l.strip() and any(kw in l for kw in (
-            "error:", "ERROR:", "rejected", "fatal:", "FATAL:",
-            "Permission denied", "GH001:", "GH013:", "push protection",
-        ))
-    ]
-    if error_lines:
-        # Take the last few error lines (most relevant) and join them
-        selected = error_lines[-3:]  # last 3 error lines
-        result = " | ".join(selected)
-        return result[-400:]
+    # ── Pattern matching (order matters — check specific before generic) ──
 
-    # Fallback: last non-empty line, or last 400 chars of full message
-    non_empty = [l.strip() for l in lines if l.strip()]
-    if non_empty:
-        return non_empty[-1][:400]
-    return msg[-400:]
+    # Large file (GH001)
+    if "file size limit" in raw_lower or ("gh001" in raw_lower and "large file" in raw_lower):
+        m = re.search(r"File (.+?) is ([\d.]+ [GMK]B)", raw)
+        if m:
+            return {"category": "large_file",
+                    "message": f"{m.group(1)} is {m.group(2)}, exceeds GitHub 100 MB limit"}
+        return {"category": "large_file",
+                "message": "A file exceeds GitHub's 100 MB file size limit"}
+
+    # Push protection (GH013 — secret scanning)
+    if "push protection" in raw_lower or "gh013" in raw_lower:
+        return {"category": "push_protection",
+                "message": "Blocked by GitHub push protection (secret/key leaked in history)"}
+
+    # Pre-receive hook declined
+    if "pre-receive hook declined" in raw_lower or "hook declined" in raw_lower:
+        return {"category": "hook_declined",
+                "message": "Rejected by destination server pre-receive hook"}
+
+    # Refusing to delete current branch
+    if "refusing to delete" in raw_lower:
+        m = re.search(r"refs/heads/(\S+)", raw)
+        branch = m.group(1) if m else "unknown"
+        return {"category": "branch_delete",
+                "message": f"Cannot delete '{branch}' (current default branch on destination)"}
+
+    # Rate limiting
+    if "secondary rate limit" in raw_lower or "rate limit" in raw_lower:
+        return {"category": "rate_limited",
+                "message": "GitHub rate limited this request — will retry next run"}
+
+    # Repository not found
+    if "repository not found" in raw_lower or "not found" in raw_lower:
+        return {"category": "repo_not_found",
+                "message": "Source repository not found or has been deleted"}
+
+    # Clone failures
+    if "clone failed" in raw_lower or "could not read from remote" in raw_lower:
+        return {"category": "clone_failed",
+                "message": "Failed to clone from source (network/auth/availability issue)"}
+
+    # Timeout
+    if "timeout" in raw_lower or "timed out" in raw_lower:
+        return {"category": "timeout",
+                "message": "Operation timed out"}
+
+    # Fatal git error — extract the fatal line
+    for line in raw.split("\n"):
+        if "fatal:" in line.lower():
+            return {"category": "push_failed",
+                    "message": line.strip()[:200]}
+
+    # Generic rejected push
+    if "rejected" in raw_lower:
+        for line in reversed(raw.split("\n")):
+            if "rejected" in line.lower():
+                return {"category": "push_failed",
+                        "message": line.strip()[:200]}
+
+    # Generic error line
+    for line in reversed(raw.split("\n")):
+        stripped = line.strip()
+        if "error:" in stripped.lower() and not re.match(r'^[a-f0-9]{20,}', stripped):
+            return {"category": "unknown",
+                    "message": stripped[:200]}
+
+    # Absolute fallback
+    return {"category": "unknown",
+            "message": (raw[:200] or type(exc).__name__)}
 
 
 def parse_args(argv: Optional[List[str]] = None) -> argparse.Namespace:
@@ -509,7 +565,7 @@ def main(argv: Optional[List[str]] = None) -> Dict[str, Any]:
             logger.info(f"✓ {repo}")
         except Exception as e:
             failed_list.append(repo)
-            errors[repo] = _short_error(e)
+            errors[repo] = _classify_error(e)
             logger.error(f"✗ {repo}: {errors[repo]}")
 
     # Build structured results
