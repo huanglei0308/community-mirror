@@ -60,10 +60,16 @@ def merge(existing: dict, current: dict) -> dict:
                 continue  # keep existing success/failed from another workflow
             repo_status[repo] = status
 
-    # 3. Merge diagnoses (current overrides for same repos)
+    # 3. Merge errors (current overrides for same repos, drop for success)
+    merged_errors = dict(existing.get("errors", {}))
+    merged_errors.update(current.get("errors", {}))
+    for repo in list(merged_errors.keys()):
+        if repo_status.get(repo) == "success":
+            del merged_errors[repo]
+
+    # 4. Merge diagnoses (current overrides for same repos, drop for success)
     merged_diagnoses = dict(existing.get("diagnoses", {}))
     merged_diagnoses.update(current.get("diagnoses", {}))
-    # Drop diagnoses for repos that are now successful
     for repo in list(merged_diagnoses.keys()):
         if repo_status.get(repo) == "success":
             del merged_diagnoses[repo]
@@ -105,6 +111,7 @@ def merge(existing: dict, current: dict) -> dict:
         "success_list": success_list,
         "failed_list": failed_list,
         "skipped_list": skipped_list,
+        "errors": merged_errors,
         "diagnoses": merged_diagnoses,
         "workflows": merged_workflows,
     }

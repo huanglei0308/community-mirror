@@ -72,6 +72,7 @@ jobs:
           --static-list "${{ matrix.batch_list }}" \
           --force-update \
           --clone-style ssh \
+          --workflow repo-mirror \
           --output batch_results.json
 
     - name: Upload batch results
@@ -109,12 +110,13 @@ jobs:
         pattern: batch-results-*
         path: batch-results
 
-    - name: Merge batch results
+    - name: Merge batch results into one results.json
       run: |
         python3 << PYEOF
-        import json, glob
+        import json, glob, time
 
         results = {
+            "src": "", "dst": "", "workflow": "repo-mirror",
             "total": 0, "success": 0, "failed": 0, "skipped": 0,
             "success_list": [], "failed_list": [], "skipped_list": [],
             "errors": {},
@@ -123,6 +125,8 @@ jobs:
         for f in sorted(glob.glob("batch-results/batch-results-*/batch_results.json")):
             with open(f) as fp:
                 b = json.load(fp)
+            results["src"] = b.get("src", results["src"])
+            results["dst"] = b.get("dst", results["dst"])
             results["total"] += b.get("total", 0)
             results["success"] += b.get("success", 0)
             results["failed"] += b.get("failed", 0)
@@ -132,38 +136,15 @@ jobs:
             results["skipped_list"].extend(b.get("skipped_list", []))
             results["errors"].update(b.get("errors", {}))
 
-        import time
-        results["timestamp"] = time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())
+        results["timestamp"] = time.strftime(
+            "%Y-%m-%dT%H:%M:%SZ", time.gmtime())
 
         with open("results.json", "w") as f:
             json.dump(results, f, indent=2, ensure_ascii=False)
 
-        print(f"Total: {results['total']} = S:{results['success']} + F:{results['failed']} + Sk:{results['skipped']}")
+        print(f"Total: {results['total']} = "
+              f"S:{results['success']} + F:{results['failed']} + Sk:{results['skipped']}")
         PYEOF
-
-    - name: Merge with existing results on gh-pages
-      run: |
-        REPO=$(echo "${{ github.repository }}" | cut -d/ -f2)
-        MERGE_URL="https://${{ github.repository_owner }}.github.io/${REPO}/results.json"
-        python3 -c "
-        import json, requests
-        with open('results.json') as f: curr = json.load(f)
-        try:
-            r = requests.get('$MERGE_URL', timeout=30)
-            if r.status_code == 200:
-                existing = r.json()
-                # Keep existing data for repos not in current batch
-                for status in ('success','failed','skipped'):
-                    for repo in existing.get(f'{status}_list', []):
-                        all_repos = curr['success_list'] + curr['failed_list'] + curr['skipped_list']
-                        if repo not in all_repos:
-                            curr[f'{status}_list'].append(repo)
-                            curr[status] += 1
-                            curr['total'] += 1
-        except Exception as e:
-            print(f'Merge skipped: {e}')
-        with open('results.json','w') as f: json.dump(curr, f, indent=2)
-        "
 
     - name: Diagnose failures
       continue-on-error: true
@@ -175,6 +156,14 @@ jobs:
           --src-token "${{ secrets.SRC_TOKEN }}" \
           --dst-token "${{ secrets.DST_TOKEN }}" \
           --account-type org
+
+    - name: Merge with existing results on gh-pages
+      run: |
+        REPO=$(echo "${{ github.repository }}" | cut -d/ -f2)
+        MERGE_URL="https://${{ github.repository_owner }}.github.io/${REPO}/results.json"
+        python _mirror-hub/scripts/merge_results.py results.json \
+          --merge-url "$MERGE_URL" \
+          --output results.json
 
     - name: Update README with sync status
       run: python update_readme.py

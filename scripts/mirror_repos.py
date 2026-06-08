@@ -369,13 +369,41 @@ class Mirror:
 
 
 def _short_error(exc: Exception) -> str:
-    """Extract a concise error message."""
-    msg = str(exc).strip()
-    # GitPython errors have detailed stderr — grab the last meaningful line
+    """Extract a concise but complete error message for README display.
+
+    For multi-line git errors (RuntimeError wrapping subprocess stderr),
+    the most useful diagnostic is usually in lines containing "error:" or
+    "remote rejected" — strip out trace IDs and keep the actionable part.
+    Returns at most 400 chars, prioritizing the end of the message.
+    """
     if hasattr(exc, "stderr") and exc.stderr:
-        lines = [l for l in exc.stderr.strip().split("\n") if l.strip()]
-        return lines[-1][:300] if lines else msg[:300]
-    return msg[:300]
+        msg = exc.stderr.strip()
+    else:
+        msg = str(exc).strip()
+
+    if not msg:
+        return type(exc).__name__
+
+    # Collect lines that look like actual error messages
+    lines = msg.split("\n")
+    error_lines = [
+        l.strip() for l in lines
+        if l.strip() and any(kw in l for kw in (
+            "error:", "ERROR:", "rejected", "fatal:", "FATAL:",
+            "Permission denied", "GH001:", "GH013:", "push protection",
+        ))
+    ]
+    if error_lines:
+        # Take the last few error lines (most relevant) and join them
+        selected = error_lines[-3:]  # last 3 error lines
+        result = " | ".join(selected)
+        return result[-400:]
+
+    # Fallback: last non-empty line, or last 400 chars of full message
+    non_empty = [l.strip() for l in lines if l.strip()]
+    if non_empty:
+        return non_empty[-1][:400]
+    return msg[-400:]
 
 
 def parse_args(argv: Optional[List[str]] = None) -> argparse.Namespace:
@@ -404,6 +432,8 @@ def parse_args(argv: Optional[List[str]] = None) -> argparse.Namespace:
     p.add_argument("--list-only", action="store_true",
                    help="Only list source repos (no mirroring)")
     p.add_argument("--output", default="results.json", help="Output JSON path")
+    p.add_argument("--workflow", default="mirror-repos",
+                   help="Workflow name for metadata (default: mirror-repos)")
     p.add_argument("--debug", action="store_true", help="Enable debug logging")
     return p.parse_args(argv)
 
@@ -493,6 +523,7 @@ def main(argv: Optional[List[str]] = None) -> Dict[str, Any]:
     results: Dict[str, Any] = {
         "src": args.src,
         "dst": args.dst,
+        "workflow": args.workflow,
         "total": total,
         "success": success,
         "failed": failed,
