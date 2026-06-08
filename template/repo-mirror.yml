@@ -84,9 +84,22 @@ jobs:
 
         echo "Job ID: $JOB_ID"
 
-        curl -s -L -H "Authorization: token ${{ secrets.GITHUB_TOKEN }}" \
-          "https://api.github.com/repos/${{ github.repository }}/actions/jobs/$JOB_ID/logs" \
-          > job_log.txt
+        HTTP_CODE=$(curl -s -o job_log.txt -w "%{http_code}" \
+          -L --location-trusted --connect-timeout 10 --max-time 30 \
+          -H "Authorization: token ${{ secrets.GITHUB_TOKEN }}" \
+          "https://api.github.com/repos/${{ github.repository }}/actions/jobs/$JOB_ID/logs")
+
+        echo "Log download: HTTP $HTTP_CODE, $(wc -c < job_log.txt) bytes"
+
+        if [ "$HTTP_CODE" != "200" ] || [ $(wc -c < job_log.txt) -lt 500 ]; then
+          echo "::warning::Log may not be ready, retrying in 5s..."
+          sleep 5
+          HTTP_CODE=$(curl -s -o job_log.txt -w "%{http_code}" \
+            -L --location-trusted --connect-timeout 10 --max-time 30 \
+            -H "Authorization: token ${{ secrets.GITHUB_TOKEN }}" \
+            "https://api.github.com/repos/${{ github.repository }}/actions/jobs/$JOB_ID/logs")
+          echo "Retry: HTTP $HTTP_CODE, $(wc -c < job_log.txt) bytes"
+        fi
 
         FAILED_LINE=$(grep "INFO:hubmirror:Failed:" job_log.txt | tail -1)
 
@@ -97,6 +110,9 @@ jobs:
             | jq -c '.')
         else
           FAILED_JSON="[]"
+          if [ "${{ steps.mirror.outcome }}" = "failure" ]; then
+            echo "::warning::Mirror step failed but log extraction found no failures."
+          fi
         fi
 
         jq -n --argjson failed "$FAILED_JSON" \
