@@ -68,27 +68,37 @@ jobs:
         force_update: true
         static_list: ${{ matrix.batch_list }}
 
-    - name: Verify sync results (git ls-remote)
+    - name: Extract hub-mirror-action results from log
       if: always()
       run: |
-        PUSH_FAILED="[]"
-        for repo in $(echo '${{ matrix.batch_list }}' | tr ',' ' '); do
-          dst_head=$(git ls-remote git@github.com:MY_ORG_MIRROR/$repo.git HEAD 2>/dev/null | cut -f1)
-          if [ -z "$dst_head" ]; then
-            PUSH_FAILED=$(echo "$PUSH_FAILED" | jq -c ". + [\"$repo\"]")
-          else
-            src_head=$(git ls-remote git@gitcode.com:MY_ORG/$repo.git HEAD 2>/dev/null | cut -f1)
-            if [ -n "$src_head" ] && [ "$src_head" != "$dst_head" ]; then
-              PUSH_FAILED=$(echo "$PUSH_FAILED" | jq -c ". + [\"$repo\"]")
-            fi
-          fi
-        done
+        JOB_NAME="mirror-batch-${{ strategy.job-index }}"
 
-        jq -n --argjson failed "$PUSH_FAILED" \
+        JOB_ID=$(gh api \
+          "repos/${{ github.repository }}/actions/runs/${{ github.run_id }}/jobs?per_page=100" \
+          --jq ".jobs[] | select(.name == \"$JOB_NAME\") | .id")
+
+        echo "Job: $JOB_NAME → ID=$JOB_ID"
+
+        gh api "repos/${{ github.repository }}/actions/jobs/$JOB_ID/logs" > job_log.txt 2>/dev/null
+        echo "Log: $(wc -c < job_log.txt) bytes"
+
+        FAILED_LINE=$(grep "INFO:hubmirror:Failed:" job_log.txt | tail -1)
+        grep "INFO:hubmirror:Total:" job_log.txt | tail -1 || true
+
+        if [ -n "$FAILED_LINE" ]; then
+          FAILED_JSON=$(echo "$FAILED_LINE" \
+            | sed 's/.*Failed: //' \
+            | sed "s/'/\"/g" \
+            | jq -c '.')
+        else
+          FAILED_JSON="[]"
+        fi
+
+        jq -n --argjson failed "$FAILED_JSON" \
           '{failed: $failed, failed_count: ($failed | length)}' \
           > batch_report.json
 
-        echo "Batch verified: $(jq -r .failed_count batch_report.json) push failures"
+        echo "Failed: $(jq -r .failed_count batch_report.json)"
         jq -r '.failed[]' batch_report.json 2>/dev/null | while read repo; do
           echo "   - $repo"
         done
