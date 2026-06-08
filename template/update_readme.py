@@ -23,8 +23,12 @@ src = data.get("src", "")
 dst = data.get("dst", "")
 diagnoses = data.get("diagnoses", {})
 
+batch_errors = data.get("batch_errors", 0)
+
 if failed > 0:
     overall = f"⚠️ **{failed} repo(s) failed**"
+elif batch_errors > 0:
+    overall = f"⚠️ **{batch_errors} batch(es) had mirror errors** (repos exist but push may have failed)"
 else:
     overall = "✅ All repos synced successfully"
 
@@ -50,6 +54,13 @@ if failed_list:
     # Link to Actions — derive from GITHUB_REPOSITORY env var
     repo = os.environ.get("GITHUB_REPOSITORY", "owner/repo")
     md += f"[🔍 View workflow logs](https://github.com/{repo}/actions)\n\n"
+
+if batch_errors > 0:
+    md += f"### ⚠️ Mirror Errors\n\n"
+    md += f"**{batch_errors}** mirror batch(es) had errors. "
+    md += "Some repos may exist on GitHub but the push had issues "
+    md += "(LFS auth failures, push protection, large files, etc). "
+    md += f"[🔍 View workflow logs](https://github.com/{repo}/actions) for details.\n\n"
 
 if skipped_list:
     md += "<details>\n<summary><b>⏭️ Skipped Repos ({})</b></summary>\n\n".format(len(skipped_list))
