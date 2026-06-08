@@ -59,9 +59,13 @@ jobs:
   # Each batch runs as a separate job.  With 80 repos/batch and GitHub's
   # 6-hour job limit, this scales to ~800+ repos without timing out.
   mirror:
+    name: mirror-batch-${{ strategy.job-index }}
     needs: prepare
     runs-on: ubuntu-latest
     continue-on-error: true
+    permissions:
+      contents: read
+      actions: read          # needed to download own log via API
     strategy:
       fail-fast: false
       matrix:
@@ -82,30 +86,42 @@ jobs:
         force_update: true
         static_list: ${{ matrix.batch_list }}
 
-    - name: Verify sync by comparing HEAD commits
+    - name: Extract sync results from log
       if: always()
       run: |
-        PUSH_FAILED="[]"
-        SUCCESS="[]"
-        for repo in $(echo '${{ matrix.batch_list }}' | tr ',' ' '); do
-          src_head=$(git ls-remote git@gitcode.com:MY_ORG/$repo.git HEAD 2>/dev/null | cut -f1)
-          dst_head=$(git ls-remote git@github.com:MY_ORG_MIRROR/$repo.git HEAD 2>/dev/null | cut -f1)
-          if [ -z "$dst_head" ]; then
-            PUSH_FAILED=$(echo "$PUSH_FAILED" | jq -c ". + [\"$repo\"]")
-          elif [ -n "$src_head" ] && [ "$src_head" = "$dst_head" ]; then
-            SUCCESS=$(echo "$SUCCESS" | jq -c ". + [\"$repo\"]")
-          else
-            PUSH_FAILED=$(echo "$PUSH_FAILED" | jq -c ". + [\"$repo\"]")
-          fi
-        done
-        jq -n \
-          --argjson push_failed "$PUSH_FAILED" \
-          --argjson success "$SUCCESS" \
-          '{push_failed: $push_failed, failed_count: ($push_failed | length),
-            success: $success, success_count: ($success | length)}' \
+        JOB_NAME="mirror-batch-${{ strategy.job-index }}"
+        echo "Finding job: $JOB_NAME"
+
+        JOB_ID=$(curl -s -H "Authorization: token ${{ secrets.GITHUB_TOKEN }}" \
+          -H "Accept: application/vnd.github+json" \
+          "https://api.github.com/repos/${{ github.repository }}/actions/runs/${{ github.run_id }}/jobs?per_page=100" \
+          | jq -r ".jobs[] | select(.name == \"$JOB_NAME\") | .id")
+
+        echo "Job ID: $JOB_ID"
+
+        curl -s -L -H "Authorization: token ${{ secrets.GITHUB_TOKEN }}" \
+          "https://api.github.com/repos/${{ github.repository }}/actions/jobs/$JOB_ID/logs" \
+          > job_log.txt
+
+        FAILED_LINE=$(grep "INFO:hubmirror:Failed:" job_log.txt | tail -1)
+
+        if [ -n "$FAILED_LINE" ]; then
+          FAILED_JSON=$(echo "$FAILED_LINE" \
+            | sed 's/.*Failed: //' \
+            | sed "s/'/\"/g" \
+            | jq -c '.')
+        else
+          FAILED_JSON="[]"
+        fi
+
+        jq -n --argjson failed "$FAILED_JSON" \
+          '{failed: $failed, failed_count: ($failed | length)}' \
           > batch_report.json
-        echo "✅ Synced: $(echo "$SUCCESS" | jq length)"
-        echo "❌ Push failed: $(echo "$PUSH_FAILED" | jq length)"
+
+        echo "Failed: $(jq -r .failed_count batch_report.json)"
+        jq -r '.failed[]' batch_report.json 2>/dev/null | while read repo; do
+          echo "   - $repo"
+        done
 
     - name: Upload batch report
       if: always()
@@ -215,44 +231,30 @@ jobs:
         with open("results.json") as f:
             results = json.load(f)
 
-        batch_push_failed = []
-        batch_verified = 0
-        batch_error_count = 0
-
+        # Collect failures directly from hub-mirror-action logs
+        log_failed = []
         for report_file in sorted(glob.glob("batch-reports/batch-report-*/batch_report.json")):
             with open(report_file) as f:
                 report = json.load(f)
-            for repo in report.get("push_failed", []):
-                if repo not in batch_push_failed:
-                    batch_push_failed.append(repo)
-            batch_verified += report.get("success_count", 0) + report.get("failed_count", 0)
-            if report.get("failed_count", 0) > 0:
-                batch_error_count += 1
+            for repo in report.get("failed", []):
+                if repo not in log_failed:
+                    log_failed.append(repo)
 
         api_failed = set(results.get("failed_list", []))
-        batch_failed_set = set(batch_push_failed)
-
-        for report_file in sorted(glob.glob("batch-reports/batch-report-*/batch_report.json")):
-            with open(report_file) as f:
-                report = json.load(f)
-            for repo in report.get("success", []):
-                api_failed.discard(repo)
-
-        all_failed = api_failed | batch_failed_set
+        all_failed = api_failed | set(log_failed)
 
         results["failed_list"] = sorted(all_failed)
         results["failed"] = len(results["failed_list"])
-        results["push_failed_list"] = sorted(batch_push_failed)
-        results["push_failed_count"] = len(batch_push_failed)
-        results["batch_reports_count"] = len(glob.glob("batch-reports/batch-report-*/batch_report.json"))
-        results["batch_verified"] = batch_verified
+        results["log_failed_list"] = sorted(log_failed)
+        results["log_failed_count"] = len(log_failed)
+        results["batch_reports"] = len(glob.glob("batch-reports/batch-report-*/batch_report.json"))
 
         with open("results.json", "w") as f:
             json.dump(results, f, indent=2, ensure_ascii=False)
 
-        print(f"📋 {results['batch_reports_count']} batch reports, {batch_verified} repos verified")
-        print(f"❌ Push failed (HEAD mismatch): {results['push_failed_count']}")
-        print(f"❌ Total failed: {results['failed']}")
+        print(f"📋 {results['batch_reports']} batch reports collected")
+        print(f"❌ hub-mirror-action reported: {results['log_failed_count']}")
+        print(f"❌ Total failed (merged): {results['failed']}")
         PYEOF
 
     - name: Update README with sync status

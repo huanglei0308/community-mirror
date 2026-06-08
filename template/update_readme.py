@@ -23,12 +23,12 @@ src = data.get("src", "")
 dst = data.get("dst", "")
 diagnoses = data.get("diagnoses", {})
 
-push_failed_count = data.get("push_failed_count", 0)
+log_failed_count = data.get("log_failed_count", 0)
 
 if failed > 0:
     overall = f"⚠️ **{failed} repo(s) failed**"
-elif push_failed_count > 0:
-    overall = f"⚠️ **{push_failed_count} repo(s) push failed** (HEAD mismatch)"
+elif log_failed_count > 0:
+    overall = f"⚠️ **{log_failed_count} repo(s) failed** (from hub-mirror-action log)"
 else:
     overall = "✅ All repos synced successfully"
 
@@ -55,10 +55,10 @@ if failed_list:
     repo = os.environ.get("GITHUB_REPOSITORY", "owner/repo")
     md += f"[🔍 View workflow logs](https://github.com/{repo}/actions)\n\n"
 
-if push_failed_count > 0:
-    push_failed_list = data.get("push_failed_list", [])
-    md += f"### ❌ Push Failed (HEAD mismatch)\n\n"
-    for r in push_failed_list:
+if log_failed_count > 0:
+    log_failed_list = data.get("log_failed_list", [])
+    md += f"### ❌ Sync Failed (hub-mirror-action reported)\n\n"
+    for r in log_failed_list:
         md += f"- `{r}`\n"
         if r in diagnoses:
             for d in diagnoses[r]:
