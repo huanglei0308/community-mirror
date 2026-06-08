@@ -57,7 +57,23 @@ if skipped_list:
         md += f"- `{r}`\n"
     md += "\n</details>\n\n"
 
-if success_list:
+# Show newly synced (this run) separately from already existed
+new_list = data.get("new_list", [])
+existing_list = data.get("existing_list", [])
+
+if new_list:
+    md += "### 🆕 Newly Synced (this run)\n\n"
+    for r in new_list:
+        md += f"- `{r}`\n"
+    md += "\n"
+
+if existing_list:
+    md += "<details>\n<summary><b>📦 Already Synced ({})</b></summary>\n\n".format(len(existing_list))
+    for r in existing_list:
+        md += f"- `{r}`\n"
+    md += "\n</details>\n\n"
+elif success_list and not new_list:
+    # Fallback: if no diff data, show all success as one list
     md += "<details>\n<summary><b>✅ Synced Repos ({})</b></summary>\n\n".format(len(success_list))
     for r in success_list:
         md += f"- `{r}`\n"
