@@ -16,11 +16,11 @@
 ## 实时同步状态
 
 <!-- STATUS_TABLE_START -->
-**Overall:** ✅ All synced | **2** communities | **2** repos
+**Overall:** ⚠️ **2 failed** | **2** communities | **819** repos
 
 | Community | Total | ✅ Synced | ❌ Failed | ⏭️ Skipped |
 |-----------|------:|----------:|----------:|-----------:|
-| ✅ openEuler | 1 | 1 | 0 | 0 |
+| ⚠️ openEuler | 818 | 816 | 2 | 0 |
 | ✅ My Test (lei0308) | 1 | 1 | 0 | 0 |
 
 <!-- STATUS_TABLE_END -->
