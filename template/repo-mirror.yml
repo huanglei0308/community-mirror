@@ -40,21 +40,6 @@ jobs:
           --batch-size 80
         # Optional: --black-list "huge-repo1,huge-repo2"
 
-    - name: Snapshot destination repos (pre-mirror)
-      run: |
-        python _mirror-hub/scripts/snapshot_dst.py \
-          --dst github/MY_ORG_MIRROR \
-          --dst-token "${{ secrets.DST_TOKEN }}" \
-          --account-type org \
-          --output pre_dst.json
-
-    - name: Upload pre-mirror snapshot
-      uses: actions/upload-artifact@v4
-      with:
-        name: pre-dst-snapshot
-        path: pre_dst.json
-        retention-days: 1
-
   # ── Job 2: Mirror each batch in parallel (matrix) ──
   # Each batch runs as a separate job.  With 80 repos/batch and GitHub's
   # 6-hour job limit, this scales to ~800+ repos without timing out.
@@ -185,38 +170,6 @@ jobs:
           --merge-url "$MERGE_URL" \
           --output results.json
 
-    - name: Download pre-mirror snapshot
-      uses: actions/download-artifact@v4
-      with:
-        name: pre-dst-snapshot
-
-    - name: Diff pre vs post mirror
-      run: |
-        python3 << PYEOF
-        import json
-
-        with open("results.json") as f:
-            results = json.load(f)
-        with open("pre_dst.json") as f:
-            pre_dst = set(json.load(f))
-
-        new_list = [r for r in results["success_list"] if r not in pre_dst]
-        existing_list = [r for r in results["success_list"] if r in pre_dst]
-
-        results["new_list"] = new_list
-        results["existing_list"] = existing_list
-        results["new_count"] = len(new_list)
-        results["existing_count"] = len(existing_list)
-
-        with open("results.json", "w") as f:
-            json.dump(results, f, indent=2, ensure_ascii=False)
-
-        print(f"✅ Newly synced (this run):  {len(new_list)}")
-        print(f"📦 Already existed before:   {len(existing_list)}")
-        print(f"❌ Still failed:             {results['failed']}")
-        print(f"⏭️ Skipped (black_list etc): {results['skipped']}")
-        PYEOF
-
     - name: Download batch reports
       uses: actions/download-artifact@v4
       with:
@@ -314,13 +267,6 @@ jobs:
 #        with:
 #          repository: huanglei0308/community-mirror
 #          path: _mirror-hub
-#      - name: Snapshot destination (before mirror)
-#        run: |
-#          pip install requests -q
-#          python _mirror-hub/scripts/snapshot_dst.py \
-#            --dst github/MY_ORG_MIRROR \
-#            --dst-token "$DST_TOKEN" \
-#            --account-type org --output pre_dst.json
 #      - name: Mirror repos
 #        continue-on-error: true
 #        uses: Yikun/hub-mirror-action@master
@@ -355,19 +301,6 @@ jobs:
 #          MERGE_URL="https://${{ github.repository_owner }}.github.io/${REPO}/results.json"
 #          python _mirror-hub/scripts/merge_results.py results.json \
 #            --merge-url "$MERGE_URL" --output results.json
-#      - name: Diff pre vs post mirror
-#        run: |
-#          python3 -c "
-#          import json
-#          r = json.load(open('results.json'))
-#          pre = set(json.load(open('pre_dst.json')))
-#          r['new_list'] = [x for x in r['success_list'] if x not in pre]
-#          r['existing_list'] = [x for x in r['success_list'] if x in pre]
-#          r['new_count'] = len(r['new_list'])
-#          r['existing_count'] = len(r['existing_list'])
-#          json.dump(r, open('results.json','w'), indent=2)
-#          print(f'New: {r[\"new_count\"]}  Existing: {r[\"existing_count\"]}  Failed: {r[\"failed\"]}')
-#          "
 #      - name: Update README
 #        run: python update_readme.py
 #      - name: Commit README
