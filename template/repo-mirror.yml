@@ -7,12 +7,6 @@ on:
 
 jobs:
   # ── Job 1: Fetch repo list from source API and split into batches ──
-  #
-  # If your org has fewer than ~100 repos, you can skip the batching
-  # machinery entirely — just delete jobs prepare/aggregate and put
-  # hub-mirror-action + check_sync_status + deploy into one job.
-  # See the "single-job" snippet at the bottom of this file.
-  #
   prepare:
     runs-on: ubuntu-latest
     outputs:
@@ -38,11 +32,8 @@ jobs:
           --src-token "${{ secrets.SRC_TOKEN }}" \
           --account-type org \
           --batch-size 80
-        # Optional: --black-list "huge-repo1,huge-repo2"
 
   # ── Job 2: Mirror each batch in parallel (matrix) ──
-  # Each batch runs as a separate job.  With 80 repos/batch and GitHub's
-  # 6-hour job limit, this scales to ~800+ repos without timing out.
   mirror:
     name: mirror-batch-${{ strategy.job-index }}
     needs: prepare
@@ -53,65 +44,45 @@ jobs:
       matrix:
         batch_list: ${{ fromJSON(needs.prepare.outputs.batches) }}
     steps:
+    - name: Checkout community-mirror (scripts)
+      uses: actions/checkout@v4
+      with:
+        repository: huanglei0308/community-mirror
+        path: _mirror-hub
+
+    - name: Set up Python
+      uses: actions/setup-python@v5
+      with:
+        python-version: '3.x'
+
+    - name: Install dependencies
+      run: pip install gitpython requests -q
+
     - name: Mirror batch
       id: mirror
       continue-on-error: true
-      uses: Yikun/hub-mirror-action@master
-      with:
-        src: gitcode/MY_ORG
-        dst: github/MY_ORG_MIRROR
-        src_token: ${{ secrets.SRC_TOKEN }}
-        dst_key: ${{ secrets.DST_PRIVATE_KEY }}
-        dst_token: ${{ secrets.DST_TOKEN }}
-        account_type: org
-        clone_style: ssh
-        force_update: true
-        static_list: ${{ matrix.batch_list }}
-
-    - name: Extract hub-mirror-action results from log
-      if: always()
       run: |
-        JOB_NAME="mirror-batch-${{ strategy.job-index }}"
+        python _mirror-hub/scripts/mirror_repos.py \
+          --src gitcode/MY_ORG \
+          --dst github/MY_ORG_MIRROR \
+          --src-token "${{ secrets.SRC_TOKEN }}" \
+          --dst-token "${{ secrets.DST_TOKEN }}" \
+          --dst-key "${{ secrets.DST_PRIVATE_KEY }}" \
+          --account-type org \
+          --static-list "${{ matrix.batch_list }}" \
+          --force-update \
+          --clone-style ssh \
+          --output batch_results.json
 
-        JOB_ID=$(gh api \
-          "repos/${{ github.repository }}/actions/runs/${{ github.run_id }}/jobs?per_page=100" \
-          --jq ".jobs[] | select(.name == \"$JOB_NAME\") | .id")
-
-        echo "Job: $JOB_NAME → ID=$JOB_ID"
-
-        gh api "repos/${{ github.repository }}/actions/jobs/$JOB_ID/logs" > job_log.txt 2>/dev/null
-        echo "Log: $(wc -c < job_log.txt) bytes"
-
-        FAILED_LINE=$(grep "INFO:hubmirror:Failed:" job_log.txt | tail -1)
-        grep "INFO:hubmirror:Total:" job_log.txt | tail -1 || true
-
-        if [ -n "$FAILED_LINE" ]; then
-          FAILED_JSON=$(echo "$FAILED_LINE" \
-            | sed 's/.*Failed: //' \
-            | sed "s/'/\"/g" \
-            | jq -c '.')
-        else
-          FAILED_JSON="[]"
-        fi
-
-        jq -n --argjson failed "$FAILED_JSON" \
-          '{failed: $failed, failed_count: ($failed | length)}' \
-          > batch_report.json
-
-        echo "Failed: $(jq -r .failed_count batch_report.json)"
-        jq -r '.failed[]' batch_report.json 2>/dev/null | while read repo; do
-          echo "   - $repo"
-        done
-
-    - name: Upload batch report
+    - name: Upload batch results
       if: always()
       uses: actions/upload-artifact@v4
       with:
-        name: batch-report-${{ strategy.job-index }}
-        path: batch_report.json
+        name: batch-results-${{ strategy.job-index }}
+        path: batch_results.json
         retention-days: 1
 
-  # ── Job 3: Check full status, update README, deploy to gh-pages ──
+  # ── Job 3: Aggregate results, update README, deploy gh-pages ──
   aggregate:
     needs: mirror
     runs-on: ubuntu-latest
@@ -132,87 +103,72 @@ jobs:
       with:
         python-version: '3.x'
 
-    - name: Check sync status (all repos)
-      id: status
-      continue-on-error: true
+    - name: Download all batch results
+      uses: actions/download-artifact@v4
+      with:
+        pattern: batch-results-*
+        path: batch-results
+
+    - name: Merge batch results
       run: |
-        pip install requests -q
-        python _mirror-hub/scripts/check_sync_status.py \
-          --src gitcode/MY_ORG \
-          --dst github/MY_ORG_MIRROR \
-          --src-token "${{ secrets.SRC_TOKEN }}" \
-          --dst-token "${{ secrets.DST_TOKEN }}" \
-          --account-type org \
-          --workflow-name "mirror" \
-          --output results.json
+        python3 << PYEOF
+        import json, glob
+
+        results = {
+            "total": 0, "success": 0, "failed": 0, "skipped": 0,
+            "success_list": [], "failed_list": [], "skipped_list": [],
+            "errors": {},
+        }
+
+        for f in sorted(glob.glob("batch-results/batch-results-*/batch_results.json")):
+            with open(f) as fp:
+                b = json.load(fp)
+            results["total"] += b.get("total", 0)
+            results["success"] += b.get("success", 0)
+            results["failed"] += b.get("failed", 0)
+            results["skipped"] += b.get("skipped", 0)
+            results["success_list"].extend(b.get("success_list", []))
+            results["failed_list"].extend(b.get("failed_list", []))
+            results["skipped_list"].extend(b.get("skipped_list", []))
+            results["errors"].update(b.get("errors", {}))
+
+        import time
+        results["timestamp"] = time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())
+
+        with open("results.json", "w") as f:
+            json.dump(results, f, indent=2, ensure_ascii=False)
+
+        print(f"Total: {results['total']} = S:{results['success']} + F:{results['failed']} + Sk:{results['skipped']}")
+        PYEOF
 
     - name: Merge with existing results on gh-pages
       run: |
         REPO=$(echo "${{ github.repository }}" | cut -d/ -f2)
         MERGE_URL="https://${{ github.repository_owner }}.github.io/${REPO}/results.json"
-        echo "Merging with: $MERGE_URL"
-        python _mirror-hub/scripts/merge_results.py results.json \
-          --merge-url "$MERGE_URL" \
-          --output results.json
+        python3 -c "
+        import json, requests
+        with open('results.json') as f: curr = json.load(f)
+        try:
+            r = requests.get('$MERGE_URL', timeout=30)
+            if r.status_code == 200:
+                existing = r.json()
+                # Keep existing data for repos not in current batch
+                for status in ('success','failed','skipped'):
+                    for repo in existing.get(f'{status}_list', []):
+                        all_repos = curr['success_list'] + curr['failed_list'] + curr['skipped_list']
+                        if repo not in all_repos:
+                            curr[f'{status}_list'].append(repo)
+                            curr[status] += 1
+                            curr['total'] += 1
+        except Exception as e:
+            print(f'Merge skipped: {e}')
+        with open('results.json','w') as f: json.dump(curr, f, indent=2)
+        "
 
-    - name: Download batch reports
-      uses: actions/download-artifact@v4
-      with:
-        pattern: batch-report-*
-        path: batch-reports
-
-    - name: Merge batch reports into results
-      run: |
-        python3 << PYEOF
-        import json, glob
-
-        with open("results.json") as f:
-            results = json.load(f)
-
-        # Collect hub-mirror-action failures from batch reports
-        batch_failed = []
-        for report_file in sorted(glob.glob("batch-reports/batch-report-*/batch_report.json")):
-            with open(report_file) as f:
-                report = json.load(f)
-            for repo in report.get("failed", []):
-                if repo not in batch_failed:
-                    batch_failed.append(repo)
-
-        batch_failed_set = set(batch_failed)
-
-        success_set = set(results.get("success_list", []))
-        api_failed_set = set(results.get("failed_list", []))
-        skipped_set = set(results.get("skipped_list", []))
-
-        success_set -= batch_failed_set
-        skipped_set -= batch_failed_set
-
-        all_failed = api_failed_set | batch_failed_set
-
-        results["success_list"] = sorted(success_set)
-        results["success"] = len(success_set)
-        results["failed_list"] = sorted(all_failed)
-        results["failed"] = len(all_failed)
-        results["skipped_list"] = sorted(skipped_set)
-        results["skipped"] = len(skipped_set)
-        results["total"] = results["success"] + results["failed"] + results["skipped"]
-
-        results["batch_failed_list"] = sorted(batch_failed)
-        results["batch_failed_count"] = len(batch_failed)
-        results["batch_reports"] = len(glob.glob("batch-reports/batch-report-*/batch_report.json"))
-
-        with open("results.json", "w") as f:
-            json.dump(results, f, indent=2, ensure_ascii=False)
-
-        print(f"📋 {results['batch_reports']} batch reports collected")
-        print(f"❌ hub-mirror-action failed: {results['batch_failed_count']}")
-        print(f"❌ Total failed (merged): {results['failed']}")
-        print(f"📊 Total={results['total']} = S{results['success']}+F{results['failed']}+Sk{results['skipped']}")
-        PYEOF
-
-    - name: Diagnose failures (all sources)
+    - name: Diagnose failures
       continue-on-error: true
       run: |
+        pip install requests -q
         python _mirror-hub/scripts/diagnose_failures.py results.json \
           --src gitcode/MY_ORG \
           --dst github/MY_ORG_MIRROR \
@@ -249,86 +205,3 @@ jobs:
         publish_dir: _publish
         publish_branch: gh-pages
         keep_files: false
-        user_name: 'github-actions[bot]'
-        user_email: 'github-actions[bot]@users.noreply.github.com'
-        commit_message: 'Update sync results [skip ci]'
-
-# ==========================================================================
-#  SINGLE-JOB TEMPLATE (for small orgs: < 100 repos)
-# ==========================================================================
-#
-#  If you don't need batching, replace this entire file with:
-#
-#  name: Mirror repos to destination
-#  on:
-#    workflow_dispatch:
-#    schedule:
-#      - cron: '0 1 * * *'
-#  jobs:
-#    mirror:
-#      runs-on: ubuntu-latest
-#      permissions:
-#        contents: write
-#      steps:
-#      - name: Checkout this repo
-#        uses: actions/checkout@v4
-#      - name: Checkout community-mirror (scripts)
-#        uses: actions/checkout@v4
-#        with:
-#          repository: huanglei0308/community-mirror
-#          path: _mirror-hub
-#      - name: Mirror repos
-#        continue-on-error: true
-#        uses: Yikun/hub-mirror-action@master
-#        with:
-#          src: gitcode/MY_ORG
-#          dst: github/MY_ORG_MIRROR
-#          src_token: ${{ secrets.SRC_TOKEN }}
-#          dst_key: ${{ secrets.DST_PRIVATE_KEY }}
-#          dst_token: ${{ secrets.DST_TOKEN }}
-#          account_type: org
-#          clone_style: ssh
-#          force_update: true
-#      - uses: actions/setup-python@v5
-#        with: { python-version: '3.x' }
-#      - name: Check sync status
-#        continue-on-error: true
-#        run: |
-#          pip install requests -q
-#          python _mirror-hub/scripts/check_sync_status.py \
-#            --src gitcode/MY_ORG --dst github/MY_ORG_MIRROR \
-#            --src-token "$SRC_TOKEN" --dst-token "$DST_TOKEN" \
-#            --account-type org --output results.json
-#      - name: Diagnose failures
-#        continue-on-error: true
-#        run: |
-#          python _mirror-hub/scripts/diagnose_failures.py results.json \
-#            --src gitcode/MY_ORG --dst github/MY_ORG_MIRROR \
-#            --src-token "$SRC_TOKEN" --dst-token "$DST_TOKEN" --account-type org
-#      - name: Merge with existing results on gh-pages
-#        run: |
-#          REPO=$(echo "${{ github.repository }}" | cut -d/ -f2)
-#          MERGE_URL="https://${{ github.repository_owner }}.github.io/${REPO}/results.json"
-#          python _mirror-hub/scripts/merge_results.py results.json \
-#            --merge-url "$MERGE_URL" --output results.json
-#      - name: Update README
-#        run: python update_readme.py
-#      - name: Commit README
-#        run: |
-#          git config user.name 'github-actions[bot]'
-#          git config user.email 'github-actions[bot]@users.noreply.github.com'
-#          git add README.md
-#          if git diff --cached --quiet; then
-#            echo "No changes to README"
-#          else
-#            git commit -m "Update sync status [skip ci]"
-#            git pull --rebase
-#            git push
-#          fi
-#      - name: Deploy to gh-pages
-#        uses: peaceiris/actions-gh-pages@v4
-#        with:
-#          github_token: ${{ secrets.GITHUB_TOKEN }}
-#          publish_dir: _publish
-#          publish_branch: gh-pages
-#          keep_files: false

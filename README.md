@@ -191,8 +191,9 @@ community-mirror/
 │   ├── repo-mirror.yml     ← 支持分批的 workflow 模板
 │   └── update_readme.py    ← 更新 README 同步状态的脚本
 ├── scripts/                ← 所有社区复用
-│   ├── check_sync_status.py
-│   ├── diagnose_failures.py
+│   ├── mirror_repos.py     ← 核心：仓库镜像 + 直接输出 results.json
+│   ├── merge_results.py    ← 合并多个 workflow 的结果
+│   ├── diagnose_failures.py ← 诊断失败原因
 │   └── split_batches.py    ← 大型组织自动分批
 ├── config/
 │   └── orgs.json           ← 社区注册表 (接入时 PR 改这个)

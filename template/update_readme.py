@@ -1,7 +1,8 @@
 """Update README.md with detailed sync status from results.json.
 
 Copy this file to your sync-config repo root alongside the workflow.
-The workflow will call it after check_sync_status.py generates results.json.
+The workflow will call mirror_repos.py which generates results.json
+natively — no separate check step needed.
 """
 
 import json
@@ -21,14 +22,11 @@ total = data.get("total", 0)
 ts = data.get("timestamp", "N/A")
 src = data.get("src", "")
 dst = data.get("dst", "")
+errors = data.get("errors", {})
 diagnoses = data.get("diagnoses", {})
-
-batch_failed_count = data.get("batch_failed_count", 0)
 
 if failed > 0:
     overall = f"⚠️ **{failed} repo(s) failed**"
-elif batch_failed_count > 0:
-    overall = f"⚠️ **{batch_failed_count} repo(s) push failed** (HEAD mismatch)"
 else:
     overall = "✅ All repos synced successfully"
 
@@ -46,25 +44,15 @@ if failed_list:
     md += "### ❌ Failed Repos\n\n"
     for r in failed_list:
         md += f"- `{r}`\n"
+        if r in errors:
+            md += f"  - {errors[r][:200]}\n"
         if r in diagnoses:
             for d in diagnoses[r]:
                 md += f"  - {d}\n"
         md += "\n"
 
-    # Link to Actions — derive from GITHUB_REPOSITORY env var
     repo = os.environ.get("GITHUB_REPOSITORY", "owner/repo")
     md += f"[🔍 View workflow logs](https://github.com/{repo}/actions)\n\n"
-
-if batch_failed_count > 0:
-    batch_failed_list = data.get("batch_failed_list", [])
-    md += f"### ❌ Push Failed (HEAD mismatch)\n\n"
-    for r in batch_failed_list:
-        md += f"- `{r}`\n"
-        if r in diagnoses:
-            for d in diagnoses[r]:
-                md += f"  - {d}\n"
-        md += "\n"
-    md += f"[🔍 View workflow logs](https://github.com/{repo}/actions) for details.\n\n"
 
 if skipped_list:
     md += "<details>\n<summary><b>⏭️ Skipped Repos ({})</b></summary>\n\n".format(len(skipped_list))
