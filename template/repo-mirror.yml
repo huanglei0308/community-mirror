@@ -48,9 +48,6 @@ jobs:
     needs: prepare
     runs-on: ubuntu-latest
     continue-on-error: true
-    permissions:
-      contents: read
-      actions: read          # needed to download own log via API
     strategy:
       fail-fast: false
       matrix:
@@ -71,55 +68,27 @@ jobs:
         force_update: true
         static_list: ${{ matrix.batch_list }}
 
-    - name: Extract sync results from log
+    - name: Verify sync results (git ls-remote)
       if: always()
       run: |
-        JOB_NAME="mirror-batch-${{ strategy.job-index }}"
-        echo "Finding job: $JOB_NAME"
-
-        JOB_ID=$(curl -s -H "Authorization: token ${{ secrets.GITHUB_TOKEN }}" \
-          -H "Accept: application/vnd.github+json" \
-          "https://api.github.com/repos/${{ github.repository }}/actions/runs/${{ github.run_id }}/jobs?per_page=100" \
-          | jq -r ".jobs[] | select(.name == \"$JOB_NAME\") | .id")
-
-        echo "Job ID: $JOB_ID"
-
-        HTTP_CODE=$(curl -s -o job_log.txt -w "%{http_code}" \
-          -L --location-trusted --connect-timeout 10 --max-time 30 \
-          -H "Authorization: token ${{ secrets.GITHUB_TOKEN }}" \
-          "https://api.github.com/repos/${{ github.repository }}/actions/jobs/$JOB_ID/logs")
-
-        echo "Log download: HTTP $HTTP_CODE, $(wc -c < job_log.txt) bytes"
-
-        if [ "$HTTP_CODE" != "200" ] || [ $(wc -c < job_log.txt) -lt 500 ]; then
-          echo "::warning::Log may not be ready, retrying in 5s..."
-          sleep 5
-          HTTP_CODE=$(curl -s -o job_log.txt -w "%{http_code}" \
-            -L --location-trusted --connect-timeout 10 --max-time 30 \
-            -H "Authorization: token ${{ secrets.GITHUB_TOKEN }}" \
-            "https://api.github.com/repos/${{ github.repository }}/actions/jobs/$JOB_ID/logs")
-          echo "Retry: HTTP $HTTP_CODE, $(wc -c < job_log.txt) bytes"
-        fi
-
-        FAILED_LINE=$(grep "INFO:hubmirror:Failed:" job_log.txt | tail -1)
-
-        if [ -n "$FAILED_LINE" ]; then
-          FAILED_JSON=$(echo "$FAILED_LINE" \
-            | sed 's/.*Failed: //' \
-            | sed "s/'/\"/g" \
-            | jq -c '.')
-        else
-          FAILED_JSON="[]"
-          if [ "${{ steps.mirror.outcome }}" = "failure" ]; then
-            echo "::warning::Mirror step failed but log extraction found no failures."
+        PUSH_FAILED="[]"
+        for repo in $(echo '${{ matrix.batch_list }}' | tr ',' ' '); do
+          dst_head=$(git ls-remote git@github.com:MY_ORG_MIRROR/$repo.git HEAD 2>/dev/null | cut -f1)
+          if [ -z "$dst_head" ]; then
+            PUSH_FAILED=$(echo "$PUSH_FAILED" | jq -c ". + [\"$repo\"]")
+          else
+            src_head=$(git ls-remote git@gitcode.com:MY_ORG/$repo.git HEAD 2>/dev/null | cut -f1)
+            if [ -n "$src_head" ] && [ "$src_head" != "$dst_head" ]; then
+              PUSH_FAILED=$(echo "$PUSH_FAILED" | jq -c ". + [\"$repo\"]")
+            fi
           fi
-        fi
+        done
 
-        jq -n --argjson failed "$FAILED_JSON" \
+        jq -n --argjson failed "$PUSH_FAILED" \
           '{failed: $failed, failed_count: ($failed | length)}' \
           > batch_report.json
 
-        echo "Failed: $(jq -r .failed_count batch_report.json)"
+        echo "Batch verified: $(jq -r .failed_count batch_report.json) push failures"
         jq -r '.failed[]' batch_report.json 2>/dev/null | while read repo; do
           echo "   - $repo"
         done
@@ -190,29 +159,29 @@ jobs:
         with open("results.json") as f:
             results = json.load(f)
 
-        # Collect failures directly from hub-mirror-action logs
-        log_failed = []
+        # Collect push failures detected by per-batch git ls-remote verification
+        batch_failed = []
         for report_file in sorted(glob.glob("batch-reports/batch-report-*/batch_report.json")):
             with open(report_file) as f:
                 report = json.load(f)
             for repo in report.get("failed", []):
-                if repo not in log_failed:
-                    log_failed.append(repo)
+                if repo not in batch_failed:
+                    batch_failed.append(repo)
 
         api_failed = set(results.get("failed_list", []))
-        all_failed = api_failed | set(log_failed)
+        all_failed = api_failed | set(batch_failed)
 
         results["failed_list"] = sorted(all_failed)
         results["failed"] = len(results["failed_list"])
-        results["log_failed_list"] = sorted(log_failed)
-        results["log_failed_count"] = len(log_failed)
+        results["batch_failed_list"] = sorted(batch_failed)
+        results["batch_failed_count"] = len(batch_failed)
         results["batch_reports"] = len(glob.glob("batch-reports/batch-report-*/batch_report.json"))
 
         with open("results.json", "w") as f:
             json.dump(results, f, indent=2, ensure_ascii=False)
 
         print(f"📋 {results['batch_reports']} batch reports collected")
-        print(f"❌ hub-mirror-action reported: {results['log_failed_count']}")
+        print(f"❌ Batch-verified push failures: {results['batch_failed_count']}")
         print(f"❌ Total failed (merged): {results['failed']}")
         PYEOF
 
