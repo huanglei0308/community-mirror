@@ -151,16 +151,6 @@ jobs:
           --workflow-name "mirror" \
           --output results.json
 
-    - name: Diagnose failures
-      continue-on-error: true
-      run: |
-        python _mirror-hub/scripts/diagnose_failures.py results.json \
-          --src gitcode/MY_ORG \
-          --dst github/MY_ORG_MIRROR \
-          --src-token "${{ secrets.SRC_TOKEN }}" \
-          --dst-token "${{ secrets.DST_TOKEN }}" \
-          --account-type org
-
     - name: Merge with existing results on gh-pages
       run: |
         REPO=$(echo "${{ github.repository }}" | cut -d/ -f2)
@@ -209,6 +199,16 @@ jobs:
         print(f"❌ hub-mirror-action reported: {results['log_failed_count']}")
         print(f"❌ Total failed (merged): {results['failed']}")
         PYEOF
+
+    - name: Diagnose failures (all sources)
+      continue-on-error: true
+      run: |
+        python _mirror-hub/scripts/diagnose_failures.py results.json \
+          --src gitcode/MY_ORG \
+          --dst github/MY_ORG_MIRROR \
+          --src-token "${{ secrets.SRC_TOKEN }}" \
+          --dst-token "${{ secrets.DST_TOKEN }}" \
+          --account-type org
 
     - name: Update README with sync status
       run: python update_readme.py
