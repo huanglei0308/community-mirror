@@ -169,7 +169,7 @@ jobs:
         with open("results.json") as f:
             results = json.load(f)
 
-        # Collect push failures detected by per-batch git ls-remote verification
+        # Collect hub-mirror-action failures from batch reports
         batch_failed = []
         for report_file in sorted(glob.glob("batch-reports/batch-report-*/batch_report.json")):
             with open(report_file) as f:
@@ -178,11 +178,25 @@ jobs:
                 if repo not in batch_failed:
                     batch_failed.append(repo)
 
-        api_failed = set(results.get("failed_list", []))
-        all_failed = api_failed | set(batch_failed)
+        batch_failed_set = set(batch_failed)
 
+        success_set = set(results.get("success_list", []))
+        api_failed_set = set(results.get("failed_list", []))
+        skipped_set = set(results.get("skipped_list", []))
+
+        success_set -= batch_failed_set
+        skipped_set -= batch_failed_set
+
+        all_failed = api_failed_set | batch_failed_set
+
+        results["success_list"] = sorted(success_set)
+        results["success"] = len(success_set)
         results["failed_list"] = sorted(all_failed)
-        results["failed"] = len(results["failed_list"])
+        results["failed"] = len(all_failed)
+        results["skipped_list"] = sorted(skipped_set)
+        results["skipped"] = len(skipped_set)
+        results["total"] = results["success"] + results["failed"] + results["skipped"]
+
         results["batch_failed_list"] = sorted(batch_failed)
         results["batch_failed_count"] = len(batch_failed)
         results["batch_reports"] = len(glob.glob("batch-reports/batch-report-*/batch_report.json"))
@@ -191,8 +205,9 @@ jobs:
             json.dump(results, f, indent=2, ensure_ascii=False)
 
         print(f"📋 {results['batch_reports']} batch reports collected")
-        print(f"❌ Batch-verified push failures: {results['batch_failed_count']}")
+        print(f"❌ hub-mirror-action failed: {results['batch_failed_count']}")
         print(f"❌ Total failed (merged): {results['failed']}")
+        print(f"📊 Total={results['total']} = S{results['success']}+F{results['failed']}+Sk{results['skipped']}")
         PYEOF
 
     - name: Diagnose failures (all sources)
