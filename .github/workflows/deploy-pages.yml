@@ -6,6 +6,8 @@ on:
     paths:
       - 'public/**'
       - 'config/orgs.json'
+  schedule:
+    - cron: '27 2 * * *'
   workflow_dispatch:
 
 concurrency:
