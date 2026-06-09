@@ -75,7 +75,7 @@ account_type: org                # org / user / group
 # timeout: '1h'                  # 大仓库需要更长超时
 ```
 
-> ⚠️ **大型组织（>100 仓库）：** 模板默认使用**矩阵分批**策略，自动将仓库分成每批 80 个并行同步，避免单个 job 超时（GitHub Actions 6 小时限制）。小型组织可使用模板底部的单 job 精简版。
+> ⚠️ **大型组织（>100 仓库）：** 模板默认使用**矩阵分批**策略，自动将仓库分成每批 80 个并行同步，避免单个 job 超时（GitHub Actions 6 小时限制）。小型组织可直接使用，分批逻辑在仓库少时自动退化为单个 job。
 
 支持的平台前缀：`github`、`gitee`、`gitcode`、`gitlab`
 
@@ -138,17 +138,26 @@ PR 合并后，你的社区会自动出现在 [仪表盘](https://huanglei0308.g
 
 ### 常见问题
 
+**Q: Hub 需要我的密钥吗？**
+不需要。密钥放在你自己的仓库 Secrets 里，Hub 完全不碰。
+
+**Q: 支持哪些平台？**
+GitHub、Gitee、Gitcode、GitLab。基于自研的 `mirror_repos.py`（从 hub-mirror-action 核心逻辑 fork 并增强）。
+
+**Q: 同步失败了怎么办？**
+仪表盘和 README 会自动显示失败仓库及**错误分类**（如 "File Too Large"、"Push Protection Blocked" 等），一目了然。常见原因：源端仓库超大文件（>100MB）、GitHub push protection 拦截、pre-receive hook 拒绝、网络超时。
+
+**Q: 仓库太多（800+），一个 workflow 跑不完就被终止了（⚠️ 叹号）？**
+这是 GitHub Actions 的 6 小时限制。模板已内置**矩阵分批**策略：自动拉取仓库列表 → 分成每批 80 个 → 多个 job 并行同步 → 最后汇总。无需额外配置。
+
+**Q: 我不用 Gitcode，用 Gitee，可以吗？**
+可以。模板中的 `src` 和 `dst` 改成你的平台即可，比如 `src: gitee/my-org`。
+
 **Q: workflow 跑完报 "Permission denied to github-actions[bot]"?**
 → 检查 **Step 5.1**，确保 Actions 有 Read and write permissions。
 
-**Q: Pages 部署报 submodule 错误?**
-→ 正常现象。确保 workflow 中 `publish_dir` 指向干净的 `_publish/` 目录。
-
 **Q: 仪表盘显示 "NO DATA"?**
 → 确认 `results_url` 可公开访问，且 workflow 已成功部署到 gh-pages。
-
-**Q: 仓库太多（800+），一个 workflow 跑不完就被终止了（⚠️ 叹号）？**
-→ 这是 GitHub Actions 的 6 小时限制。模板已内置**矩阵分批**策略：自动拉取仓库列表 → 分成每批 80 个 → 多个 job 并行同步 → 最后汇总。无需额外配置。
 
 **Q: 我的仓库是私有的，results.json 会暴露吗?**
 → results.json 只包含仓库名和计数，不含源码，公开无安全风险。
@@ -156,30 +165,21 @@ PR 合并后，你的社区会自动出现在 [仪表盘](https://huanglei0308.g
 ## 如何工作？
 
 ```
-各社区仓库 (自己管密钥)
-  ├─ hub-mirror-action 同步代码
-  ├─ check_sync_status.py 检查结果 → results.json
-  └─ 推到自己的 gh-pages (公开 URL)
+各社区的 sync-config 仓库 (自己管密钥)
+  ├─ mirror_repos.py      同步代码 + 直接输出 results.json
+  ├─ merge_results.py     合并多个 workflow 的结果
+  ├─ diagnose_failures.py 诊断失败原因（可选）
+  ├─ update_readme.py     更新 README 显示同步状态
+  └─ 部署到自己的 gh-pages (公开 URL)
          │
          ▼
-本仓库 gh-pages (纯静态页面, 零 Token)
-  ├─ index.html
-  └─ app.js ──浏览器里 fetch 所有社区的 results.json ──→ 渲染仪表盘
+  本仓库 gh-pages (纯静态页面, 零 Token)
+    ├─ index.html
+    └─ app.js ── 浏览器里 fetch 所有社区的 results.json ──→ 渲染仪表盘
 ```
 
-## FAQ
+> **核心脚本都在 `community-mirror/scripts/`**，各社区 workflow 通过 checkout 引用，无需自行维护。
 
-**Q: Hub 需要我的密钥吗？**
-不需要。密钥放在你自己的仓库 Secrets 里，Hub 完全不碰。
-
-**Q: 支持哪些平台？**
-GitHub、Gitee、Gitcode、GitLab。基于 [Yikun/hub-mirror-action](https://github.com/Yikun/hub-mirror-action)。
-
-**Q: 同步失败了怎么办？**
-仪表盘会显示失败仓库列表。检查你的 workflow 日志排查具体原因。常见原因：源端认证过期、仓库过大超时、网络问题。
-
-**Q: 我不用 Gitcode，用 Gitee，可以吗？**
-可以。模板中的 `src` 和 `dst` 改成你的平台即可，比如 `src: gitee/my-org`。
 
 ## 文件结构
 
