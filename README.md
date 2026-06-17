@@ -16,12 +16,12 @@
 ## 实时同步状态
 
 <!-- STATUS_TABLE_START -->
-**Overall:** ⚠️ **44 failed** | **2** communities | **825** repos
+**Overall:** ⚠️ **44 failed** | **2** communities | **824** repos
 
 | Community | Total | ✅ Synced | ❌ Failed | ⏭️ Skipped |
 |-----------|------:|----------:|----------:|-----------:|
 | ⚠️ openEuler | 824 | 780 | 44 | 0 |
-| ✅ My Test (lei0308) | 1 | 1 | 0 | 0 |
+| ❓ Kunpeng+BoostKit | - | - | - | - |
 
 <!-- STATUS_TABLE_END -->
 
@@ -31,7 +31,7 @@
 | 社区 | 源 | 目的 | 负责人 | 状态 |
 |------|-----|------|--------|------|
 | openEuler | gitcode/openeuler | github/openeuler-mirror | @huanglei0308 | [查看](https://github.com/openeuler-mirror/sync-config#sync-status) |
-| My Test (lei0308) | gitcode/lei0308 | github/huanglei0308 | @huanglei0308 | [查看](https://github.com/huanglei0308/sync-config#sync-status) |
+| Kunpeng+BoostKit | gitcode/kunpengcompute | github/kunpengcompute | @huanglei 30082796 | [查看](https://github.com/kunpengcompute/sync-config#sync-status) |
 <!-- COMMUNITY_TABLE_END -->
 
 > 你的社区也在这里？见下方接入指南。
