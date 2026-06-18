@@ -60,7 +60,7 @@ jobs:
         python-version: '3.x'
 
     - name: Install dependencies
-      run: pip install gitpython requests -q
+      run: pip install requests -q
 
     - name: Mirror batch
       id: mirror

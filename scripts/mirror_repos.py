@@ -61,8 +61,8 @@ import subprocess
 import sys
 import time
 from typing import Any, Dict, List, Optional, Tuple
+from urllib.parse import quote
 
-import git
 import requests
 
 logger = logging.getLogger("mirror")
@@ -248,6 +248,104 @@ class Hub:
             logger.error(f"Create repo {repo_name} failed: {e}")
             return False
 
+    def list_dest_branches(self, repo_name: str) -> List[str]:
+        """List destination branches for branch protection cleanup."""
+        if not self.dst_platform or self.dst_type not in ("gitee", "github") or not self.dst_token:
+            return []
+
+        branches: List[str] = []
+        page = 1
+        while True:
+            url = f"{self.dst_platform.api_base}/repos/{self.dst_account}/{repo_name}/branches"
+            headers: Dict[str, str] = {}
+            params: Dict[str, Any] = {"per_page": 100, "page": page}
+            if self.dst_type == "github":
+                headers = {
+                    "Authorization": f"token {self.dst_token}",
+                    "Accept": "application/vnd.github+json",
+                }
+            else:
+                params["access_token"] = self.dst_token
+
+            try:
+                resp = self.session.get(
+                    url, headers=headers, params=params, timeout=self.api_timeout,
+                )
+            except requests.RequestException as e:
+                logger.warning(f"List branches failed for {repo_name}: {e}")
+                return branches
+
+            if resp.status_code != 200:
+                logger.warning(
+                    f"List branches failed for {repo_name}: HTTP {resp.status_code}"
+                )
+                return branches
+
+            items = resp.json()
+            branches.extend(
+                item["name"] for item in items
+                if isinstance(item, dict) and item.get("name")
+            )
+
+            total_page = resp.headers.get("total_page")
+            if total_page:
+                if page >= int(total_page):
+                    break
+            elif len(items) < 100:
+                break
+            page += 1
+
+        return branches
+
+    def delete_dest_branch_rule(self, repo_name: str, branch: str) -> bool:
+        """Delete a destination branch protection rule. Returns True when removed."""
+        if not self.dst_platform or self.dst_type not in ("gitee", "github") or not self.dst_token:
+            return False
+
+        encoded_branch = quote(branch, safe="")
+        url = (
+            f"{self.dst_platform.api_base}/repos/{self.dst_account}/{repo_name}"
+            f"/branches/{encoded_branch}"
+        )
+        headers: Dict[str, str] = {}
+        params: Dict[str, str] = {}
+        if self.dst_type == "github":
+            url = f"{url}/protection"
+            headers = {
+                "Authorization": f"token {self.dst_token}",
+                "Accept": "application/vnd.github+json",
+            }
+        else:
+            url = f"{url}/setting"
+            params["access_token"] = self.dst_token
+
+        try:
+            resp = self.session.delete(
+                url, headers=headers, params=params, timeout=self.api_timeout,
+            )
+        except requests.RequestException as e:
+            logger.warning(f"Delete branch rule failed for {repo_name}/{branch}: {e}")
+            return False
+
+        if resp.status_code in (200, 201, 204, 404):
+            return resp.status_code != 404
+
+        logger.warning(
+            f"Delete branch rule failed for {repo_name}/{branch}: HTTP {resp.status_code}"
+        )
+        return False
+
+    def clear_dest_branch_rules(self, repo_name: str) -> int:
+        """Delete all supported destination branch protection rules for a repo."""
+        branches = self.list_dest_branches(repo_name)
+        deleted = 0
+        for branch in branches:
+            if self.delete_dest_branch_rule(repo_name, branch):
+                deleted += 1
+        if branches:
+            logger.info(f"Cleared {deleted}/{len(branches)} branch rules for {repo_name}")
+        return deleted
+
 
 # ──────────────────────────────────────────────────────────────────────
 # Mirror: clone → create → push for one repo
@@ -298,10 +396,10 @@ class Mirror:
         self.dst_name = dst_name
         self.src_url = f"{hub.src_repo_base}/{src_name}.git"
         self.dst_url = f"{hub.dst_repo_base}/{dst_name}.git"
-        self.repo_path = os.path.join(args.cache_path, src_name)
+        self.repo_path = os.path.join(args.cache_path, f"{src_name}.git")
         self.timeout = _parse_timeout(args.timeout)
         self.force_update = args.force_update
-        self.lfs = args.lfs
+        self.clear_branch_rules = args.clear_branch_rules
 
     def _git_cmd(self, *args: str, **kwargs: Any) -> subprocess.CompletedProcess:
         """Run a git command with timeout."""
@@ -312,45 +410,52 @@ class Mirror:
         )
 
     def _clone(self) -> None:
-        logger.info(f"git clone {self.src_url}")
+        logger.info(f"git clone --mirror {self.src_url}")
         parent = os.path.dirname(self.repo_path)
         os.makedirs(parent, exist_ok=True)
         result = subprocess.run(
-            ["git", "clone", self.src_url, self.repo_path],
+            ["git", "clone", "--mirror", self.src_url, self.repo_path],
             capture_output=True, text=True,
             timeout=self.timeout or None,
         )
         if result.returncode != 0:
             raise RuntimeError(f"Clone failed: {result.stderr.strip()}")
-
-        if self.lfs:
-            self._git_cmd("lfs", "fetch", "--all", "origin")
         logger.info(f"Clone completed: {self.repo_path}")
 
     def _update(self) -> None:
         try:
-            self._git_cmd("pull")
-        except Exception:
-            logger.warning(f"Pull failed, re-cloning {self.src_name}")
+            result = self._git_cmd("fetch", "--all", "--prune")
+        except Exception as e:
+            logger.warning(f"Fetch failed, re-cloning {self.src_name}: {e}")
             shutil.rmtree(self.repo_path, ignore_errors=True)
             self._clone()
+            return
 
-        if self.lfs:
-            self._git_cmd("lfs", "fetch", "--all", "origin")
+        if result.returncode == 0:
+            return
+
+        logger.warning(f"Fetch failed, re-cloning {self.src_name}: {result.stderr.strip()}")
+        shutil.rmtree(self.repo_path, ignore_errors=True)
+        self._clone()
 
     def download(self) -> None:
         logger.info("(1/3) Downloading...")
-        if os.path.isdir(os.path.join(self.repo_path, ".git")):
+        if os.path.isdir(self.repo_path):
             self._update()
         else:
             self._clone()
 
     def create(self) -> None:
-        logger.info("(2/3) Creating...")
+        logger.info("(2/4) Creating...")
         self.hub.ensure_dest_repo(self.dst_name)
 
+    def clear_branch_rules_if_needed(self) -> None:
+        logger.info("(3/4) Clearing branch rules...")
+        if self.clear_branch_rules:
+            self.hub.clear_dest_branch_rules(self.dst_name)
+
     def push(self) -> None:
-        logger.info("(3/3) Force pushing...")
+        logger.info("(4/4) Force pushing...")
 
         # Check if empty repo
         rev = self._git_cmd("rev-list", "-n", "1", "--all")
@@ -358,31 +463,32 @@ class Mirror:
             logger.info(f"Empty repo {self.src_url}, skip pushing.")
             return
 
-        self._git_cmd("remote", "set-head", "origin", "-d")
-
         # Set up destination remote
         dst_type = self.hub.dst_type
-        try:
-            self._git_cmd("remote", "add", dst_type, self.dst_url)
-        except Exception:
-            self._git_cmd("remote", "rm", dst_type)
+        remote = self._git_cmd("remote")
+        remotes = set(remote.stdout.split()) if remote.returncode == 0 else set()
+        if dst_type in remotes:
+            self._git_cmd("remote", "set-url", dst_type, self.dst_url)
+        else:
             self._git_cmd("remote", "add", dst_type, self.dst_url)
 
-        cmd = ["git", "push"]
+        branch_refspec = "refs/heads/*:refs/heads/*"
+        tag_refspec = "refs/tags/*:refs/tags/*"
         if self.force_update:
-            cmd.append("-f")
-        cmd.extend([dst_type, "refs/remotes/origin/*:refs/heads/*", "--tags", "--prune"])
+            branch_refspec = f"+{branch_refspec}"
+            tag_refspec = f"+{tag_refspec}"
 
-        if self.lfs:
-            self._git_cmd("lfs", "push", dst_type, "--all")
+        cmd = [
+            "git", "push", dst_type,
+            branch_refspec,
+            tag_refspec,
+            "--prune",
+        ]
 
         result = subprocess.run(cmd, capture_output=True, text=True,
                                 timeout=self.timeout or None, cwd=self.repo_path)
         if result.returncode != 0:
             raise RuntimeError(result.stderr.strip())
-
-        if not self.force_update and self.lfs:
-            self._git_cmd("lfs", "push", dst_type, "--all")
 
 
 # ──────────────────────────────────────────────────────────────────────
@@ -506,7 +612,10 @@ def parse_args(argv: Optional[List[str]] = None) -> argparse.Namespace:
     p.add_argument("--timeout", default="30m", help="Per-repo timeout (e.g. 30m, 1h)")
     p.add_argument("--api-timeout", type=int, default=60, help="API timeout in seconds")
     p.add_argument("--mappings", default="", help="Repo name mappings: A=>B,C=>D")
-    p.add_argument("--lfs", action="store_true", help="Enable Git LFS support")
+    p.add_argument(
+        "--clear-branch-rules", action="store_true",
+        help="Delete supported destination branch protection rules before pushing",
+    )
     p.add_argument("--list-only", action="store_true",
                    help="Only list source repos (no mirroring)")
     p.add_argument("--output", default="results.json", help="Output JSON path")
@@ -582,6 +691,7 @@ def main(argv: Optional[List[str]] = None) -> Dict[str, Any]:
             mirror = Mirror(hub, repo, dst_repo, args)
             mirror.download()
             mirror.create()
+            mirror.clear_branch_rules_if_needed()
             mirror.push()
             success_list.append(repo)
             logger.info(f"✓ {repo}")

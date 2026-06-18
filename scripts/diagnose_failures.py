@@ -146,13 +146,12 @@ def main():
             else:
                 reasons.append("Destination: exists")
 
-        # 3. Check cached repo (if hub-mirror cached it)
-        cache_path = os.path.join("hub-mirror-cache", repo)
+        # 3. Check cached bare repo (if hub-mirror cached it)
+        cache_path = os.path.join("hub-mirror-cache", f"{repo}.git")
         if os.path.isdir(cache_path):
-            reasons.append("Cached: local copy exists")
-            # Check if it's a valid git repo
-            if os.path.isdir(os.path.join(cache_path, ".git")):
-                reasons.append("Cached: valid git repo")
+            reasons.append("Cached: bare mirror exists")
+            if os.path.isfile(os.path.join(cache_path, "HEAD")):
+                reasons.append("Cached: valid bare git repo")
         else:
             reasons.append("Cached: not found (download may have failed)")
 

@@ -546,6 +546,120 @@ def test_mirror_no_timeout(sample_hub_args):
     assert m.timeout == 0
 
 
+@patch.object(mirror.subprocess, "run")
+def test_mirror_clone_uses_bare_mirror(mock_run, sample_hub_args):
+    mock_run.return_value = subprocess.CompletedProcess([], 0, "", "")
+    hub = mirror.Hub(sample_hub_args)
+    m = mirror.Mirror(hub, "r1", "r1", sample_hub_args)
+
+    m._clone()
+
+    assert mock_run.call_args[0][0][:3] == ["git", "clone", "--mirror"]
+    assert m.repo_path.endswith("r1.git")
+
+
+@patch.object(mirror.subprocess, "run")
+def test_mirror_update_fetches_and_prunes(mock_run, sample_hub_args):
+    mock_run.return_value = subprocess.CompletedProcess([], 0, "", "")
+    hub = mirror.Hub(sample_hub_args)
+    m = mirror.Mirror(hub, "r1", "r1", sample_hub_args)
+
+    m._update()
+
+    assert mock_run.call_args[0][0] == ["git", "fetch", "--all", "--prune"]
+
+
+@patch.object(mirror.subprocess, "run")
+def test_mirror_push_uses_bare_refspec(mock_run, sample_hub_args):
+    sample_hub_args.force_update = True
+
+    def fake_run(cmd, **kwargs):
+        if cmd == ["git", "rev-list", "-n", "1", "--all"]:
+            return subprocess.CompletedProcess(cmd, 0, "abc123\n", "")
+        if cmd == ["git", "remote"]:
+            return subprocess.CompletedProcess(cmd, 0, "origin\n", "")
+        return subprocess.CompletedProcess(cmd, 0, "", "")
+
+    mock_run.side_effect = fake_run
+    hub = mirror.Hub(sample_hub_args)
+    m = mirror.Mirror(hub, "r1", "r1", sample_hub_args)
+
+    m.push()
+
+    assert mock_run.call_args[0][0] == [
+        "git", "push", "github",
+        "+refs/heads/*:refs/heads/*",
+        "+refs/tags/*:refs/tags/*",
+        "--prune",
+    ]
+
+
+# ═══════════════════════════════════════════════════════════════════════════
+# Branch rule cleanup
+# ═══════════════════════════════════════════════════════════════════════════
+
+
+def test_hub_clear_dest_branch_rules_for_gitee(sample_hub_args):
+    sample_hub_args.dst = "gitee/openeuler-mirror"
+    hub = mirror.Hub(sample_hub_args)
+    branch_resp = MagicMock(status_code=200, headers={"total_page": "1"})
+    branch_resp.json.return_value = [{"name": "master"}, {"name": "feature/foo"}]
+    delete_resp = MagicMock(status_code=204)
+    hub.session.get = MagicMock(return_value=branch_resp)
+    hub.session.delete = MagicMock(return_value=delete_resp)
+
+    deleted = hub.clear_dest_branch_rules("repo-a")
+
+    assert deleted == 2
+    assert hub.session.delete.call_count == 2
+    assert "feature%2Ffoo/setting" in hub.session.delete.call_args_list[1][0][0]
+    assert hub.session.delete.call_args_list[0][1]["params"] == {
+        "access_token": "dst-token-123",
+    }
+
+
+def test_hub_clear_dest_branch_rules_for_github(sample_hub_args):
+    sample_hub_args.dst = "github/openeuler-mirror"
+    hub = mirror.Hub(sample_hub_args)
+    branch_resp = MagicMock(status_code=200, headers={})
+    branch_resp.json.return_value = [{"name": "main"}, {"name": "release/v1"}]
+    delete_resp = MagicMock(status_code=204)
+    hub.session.get = MagicMock(return_value=branch_resp)
+    hub.session.delete = MagicMock(return_value=delete_resp)
+
+    deleted = hub.clear_dest_branch_rules("repo-a")
+
+    assert deleted == 2
+    get_headers = hub.session.get.call_args[1]["headers"]
+    assert get_headers["Authorization"] == "token dst-token-123"
+    assert get_headers["Accept"] == "application/vnd.github+json"
+    assert hub.session.delete.call_count == 2
+    assert "release%2Fv1/protection" in hub.session.delete.call_args_list[1][0][0]
+    delete_headers = hub.session.delete.call_args_list[1][1]["headers"]
+    assert delete_headers["Authorization"] == "token dst-token-123"
+
+
+def test_mirror_clear_branch_rules_if_needed_skips_by_default(sample_hub_args):
+    hub = mirror.Hub(sample_hub_args)
+    hub.clear_dest_branch_rules = MagicMock()
+    m = mirror.Mirror(hub, "r1", "r1", sample_hub_args)
+
+    m.clear_branch_rules_if_needed()
+
+    hub.clear_dest_branch_rules.assert_not_called()
+
+
+def test_mirror_clear_branch_rules_if_enabled(sample_hub_args):
+    sample_hub_args.clear_branch_rules = True
+    hub = mirror.Hub(sample_hub_args)
+    hub.clear_dest_branch_rules = MagicMock()
+    m = mirror.Mirror(hub, "r1", "r2", sample_hub_args)
+
+    m.clear_branch_rules_if_needed()
+
+    hub.clear_dest_branch_rules.assert_called_once_with("r2")
+
+
 # ═══════════════════════════════════════════════════════════════════════════
 # _ssh_setup
 # ═══════════════════════════════════════════════════════════════════════════
@@ -597,7 +711,7 @@ def test_parse_args_full():
         "--timeout", "1h",
         "--api-timeout", "120",
         "--mappings", "A=>B",
-        "--lfs",
+        "--clear-branch-rules",
         "--output", "out.json",
         "--workflow", "custom",
         "--debug",
@@ -618,7 +732,7 @@ def test_parse_args_full():
     assert args.timeout == "1h"
     assert args.api_timeout == 120
     assert args.mappings == "A=>B"
-    assert args.lfs is True
+    assert args.clear_branch_rules is True
     assert args.output == "out.json"
     assert args.workflow == "custom"
     assert args.debug is True
@@ -656,6 +770,7 @@ def test_main_with_static_list(mock_ssh, mock_open):
             mock_instance = MockMirror.return_value
             mock_instance.download = MagicMock()
             mock_instance.create = MagicMock()
+            mock_instance.clear_branch_rules_if_needed = MagicMock()
             mock_instance.push = MagicMock()
             mock_list.return_value = ["should-not-be-used"]
 
@@ -681,6 +796,7 @@ def test_main_with_black_and_white_list(mock_ssh, mock_open):
             mock_instance = MockMirror.return_value
             mock_instance.download = MagicMock()
             mock_instance.create = MagicMock()
+            mock_instance.clear_branch_rules_if_needed = MagicMock()
             mock_instance.push = MagicMock()
 
             result = mirror.main([
@@ -705,6 +821,7 @@ def test_main_mirror_failure_captured(mock_ssh, mock_open):
             mock_instance = MockMirror.return_value
             mock_instance.download = MagicMock()
             mock_instance.create = MagicMock()
+            mock_instance.clear_branch_rules_if_needed = MagicMock()
             mock_instance.push = MagicMock(
                 side_effect=RuntimeError("remote: repository not found")
             )
@@ -731,6 +848,7 @@ def test_main_mappings_applied(mock_ssh, mock_open):
             mock_instance = MockMirror.return_value
             mock_instance.download = MagicMock()
             mock_instance.create = MagicMock()
+            mock_instance.clear_branch_rules_if_needed = MagicMock()
             mock_instance.push = MagicMock()
 
             result = mirror.main([

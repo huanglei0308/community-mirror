@@ -73,6 +73,8 @@ account_type: org                # org / user / group
 # static_list: "repo1,repo2"     # 只同步指定仓库
 # black_list: "huge-repo"        # 不同步这些仓库
 # timeout: '1h'                  # 大仓库需要更长超时
+# 目标为 Gitee/GitHub 且分支保护阻止 force push 时，可在 mirror_repos.py 参数中追加 --clear-branch-rules
+# 注意：GitHub secret scanning push protection 不是分支保护，不能靠此参数绕过。
 ```
 
 > ⚠️ **大型组织（>100 仓库）：** 模板默认使用**矩阵分批**策略，自动将仓库分成每批 80 个并行同步，避免单个 job 超时（GitHub Actions 6 小时限制）。小型组织可直接使用，分批逻辑在仓库少时自动退化为单个 job。

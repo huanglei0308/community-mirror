@@ -46,6 +46,10 @@ account_type: org             # org / user / group
 
 # 可选：大仓库超时
 # timeout: '1h'
+
+# 目标为 Gitee/GitHub 且分支保护阻止 force push 时，
+# 可在 mirror_repos.py 参数中追加 --clear-branch-rules
+# 注意：GitHub secret scanning push protection 不是分支保护，不能靠此参数绕过。
 ```
 
 如果你想同步到 GitHub 以外的平台，修改 `src`/`dst` 前缀：

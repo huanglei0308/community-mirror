@@ -56,7 +56,7 @@ def sample_hub_args():
         cache_path="hub-mirror-cache",
         timeout="30m",
         force_update=False,
-        lfs=False,
+        clear_branch_rules=False,
         # Not strictly needed for Hub tests:
         src_account_type="",
         dst_account_type="",

@@ -264,9 +264,10 @@ def test_main_with_failures(mock_get, tmp_path):
 
 
 @patch.object(requests.Session, "get")
+@patch("os.path.isfile")
 @patch("os.path.isdir")
-def test_main_cache_hit(mock_isdir, mock_get, tmp_path):
-    """When hub-mirror-cache has the repo, include cache diagnostic (lines 152-155)."""
+def test_main_cache_hit(mock_isdir, mock_isfile, mock_get, tmp_path):
+    """When hub-mirror-cache has the bare repo, include cache diagnostic."""
     import json
     results_file = tmp_path / "results.json"
     results_file.write_text(json.dumps({
@@ -277,8 +278,9 @@ def test_main_cache_hit(mock_isdir, mock_get, tmp_path):
 
     mock_get.return_value.status_code = 200
     mock_get.return_value.json.return_value = {"size": 100}
-    # Cache directory exists and has .git
+    # Bare mirror cache directory exists and has HEAD
     mock_isdir.return_value = True
+    mock_isfile.return_value = True
 
     with patch("sys.argv", [
         "diagnose_failures.py", str(results_file),
@@ -289,5 +291,5 @@ def test_main_cache_hit(mock_isdir, mock_get, tmp_path):
     with open(results_file) as f:
         data = json.load(f)
     diags = data["diagnoses"]["cached-repo"]
-    assert any("local copy exists" in d for d in diags)
-    assert any("valid git repo" in d for d in diags)
+    assert any("bare mirror exists" in d for d in diags)
+    assert any("valid bare git repo" in d for d in diags)
