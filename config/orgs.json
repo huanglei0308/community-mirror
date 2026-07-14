@@ -8,7 +8,7 @@
       "contact": "huanglei0308",
       "source": "gitcode/openeuler",
       "destination": "github/openeuler-mirror",
-      "results_url": "https://raw.githubusercontent.com/openeuler-mirror/sync-config/main/results.json"
+      "results_url": "https://raw.githubusercontent.com/openeuler-mirror/sync-config/master/results.json"
     },
     {
       "org": "Kunpeng+BoostKit",
