@@ -128,7 +128,7 @@ function renderList(results) {
               <span class="org-badge stale">NO DATA</span>
             </span>
             <div class="org-meta">
-              ${r.contact ? `Contact: @${escapeHtml(r.contact)}` : ''}
+              ${r.contact ? `Contact: ${escapeHtml(r.contact)}` : ''}
             </div>
           </div>
           <div class="org-body">
