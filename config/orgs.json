@@ -8,7 +8,7 @@
       "contact": "huanglei0308",
       "source": "gitcode/openeuler",
       "destination": "github/openeuler-mirror",
-      "results_url": "https://openeuler-mirror.github.io/sync-config/results.json"
+      "results_url": "https://raw.githubusercontent.com/openeuler-mirror/sync-config/main/results.json"
     },
     {
       "org": "Kunpeng+BoostKit",
@@ -16,7 +16,7 @@
       "contact": "huanglei 30082796",
       "source": "gitcode/kunpengcompute",
       "destination": "github/kunpengcompute",
-      "results_url": "https://kunpengcompute.github.io/sync-config/results.json"
+      "results_url": "https://raw.githubusercontent.com/kunpengcompute/sync-config/main/results.json"
     }
   ]
 }

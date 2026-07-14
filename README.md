@@ -106,10 +106,9 @@ ssh-keygen -t rsa -b 4096 -f ~/.ssh/mirror-key -N ""
 
 #### Step 5: 修改仓库设置
 
-⚠️ **以下两步很重要，缺一不可：**
+⚠️ **以下设置很重要：**
 
-1. **Actions 写权限**：Settings → Actions → General → Workflow permissions → 选择 **"Read and write permissions"** → Save
-2. **GitHub Pages**：Settings → Pages → Source 选 **"Deploy from a branch"** → Branch 选 **`gh-pages`** → `/ (root)` → Save
+**Actions 写权限**：Settings → Actions → General → Workflow permissions → 选择 **"Read and write permissions"** → Save
 
 #### Step 6: 测试
 
@@ -117,11 +116,11 @@ ssh-keygen -t rsa -b 4096 -f ~/.ssh/mirror-key -N ""
 2. 手动触发 workflow：Actions → **"Mirror repos"** → Run workflow
 3. 等 workflow 跑完，检查：
    - 仓库 README 是否显示了同步状态
-   - `https://<your-org>.github.io/<repo>/results.json` 是否可访问
+   - `https://raw.githubusercontent.com/<your-org>/<repo>/main/results.json` 是否可访问
 
 #### Step 7: 注册到 Hub
 
-向本仓库的 [`config/orgs.json`](config/orgs.json) 添加你的社区信息并提 PR：
+向本仓库的 [`config/orgs.json`](config/orgs.json) 添加你的社区信息并提 PR（注意 `BRANCH` 替换为你的默认分支名，如 `main` 或 `master`）：
 
 ```json
 {
@@ -130,7 +129,7 @@ ssh-keygen -t rsa -b 4096 -f ~/.ssh/mirror-key -N ""
   "contact": "负责人 GitHub 账号",
   "source": "gitcode/my-org",
   "destination": "github/my-org-mirror",
-  "results_url": "https://my-org.github.io/sync-config/results.json"
+  "results_url": "https://raw.githubusercontent.com/my-org/sync-config/main/results.json"
 }
 ```
 
@@ -159,28 +158,63 @@ GitHub、Gitee、Gitcode、GitLab。基于自研的 `mirror_repos.py`（从 hub-
 → 检查 **Step 5.1**，确保 Actions 有 Read and write permissions。
 
 **Q: 仪表盘显示 "NO DATA"?**
-→ 确认 `results_url` 可公开访问，且 workflow 已成功部署到 gh-pages。
+→ 确认 `results_url` 可公开访问，且 workflow 已成功将 results.json 提交到 main 分支。
 
 **Q: 我的仓库是私有的，results.json 会暴露吗?**
 → results.json 只包含仓库名和计数，不含源码，公开无安全风险。
 
 ## 如何工作？
 
-```
-各社区的 sync-config 仓库 (自己管密钥)
-  ├─ mirror_repos.py      同步代码 + 直接输出 results.json
-  ├─ merge_results.py     合并多个 workflow 的结果
-  ├─ diagnose_failures.py 诊断失败原因（可选）
-  ├─ update_readme.py     更新 README 显示同步状态
-  └─ 部署到自己的 gh-pages (公开 URL)
-         │
-         ▼
-  本仓库 gh-pages (纯静态页面, 零 Token)
-    ├─ index.html
-    └─ app.js ── 浏览器里 fetch 所有社区的 results.json ──→ 渲染仪表盘
+### 系统架构
+
+```mermaid
+graph TB
+    subgraph HUB["Hub 层 — community-mirror"]
+        CONFIG["config/orgs.json<br/>社区注册表"]
+        DASHBOARD["public/ 静态仪表盘<br/>index.html + app.js"]
+    end
+
+    subgraph C1["openEuler/sync-config"]
+        WF1["repo-mirror.yml<br/>+ GitHub Secrets"]
+        RP1["results.json<br/>提交到 main 分支"]
+    end
+
+    subgraph C2["kunpengcompute/sync-config"]
+        WF2["repo-mirror.yml<br/>+ GitHub Secrets"]
+        RP2["results.json<br/>提交到 main 分支"]
+    end
+
+    subgraph SCRIPTS["scripts/ — 所有社区复用"]
+        S["split_batches.py<br/>mirror_repos.py<br/>merge_results.py<br/>diagnose_failures.py"]
+    end
+
+    WF1 -.->|checkout 引用| SCRIPTS
+    WF2 -.->|checkout 引用| SCRIPTS
+    WF1 --> RP1
+    WF2 --> RP2
+    DASHBOARD -->|浏览器 fetch| RP1
+    DASHBOARD -->|浏览器 fetch| RP2
+    CONFIG --> DASHBOARD
 ```
 
-> **核心脚本都在 `community-mirror/scripts/`**，各社区 workflow 通过 checkout 引用，无需自行维护。
+> **核心脚本都在 `community-mirror/scripts/`**，各社区 workflow 通过 `actions/checkout` 引用 `huanglei0308/community-mirror`，无需自行维护。
+>
+> 🔗 **[查看完整架构图（含 workflow 流程、数据流、错误分类）](docs/architecture.html)**
+
+### 单社区 Workflow 流程（3 阶段）
+
+```mermaid
+flowchart LR
+    A["Job 1: prepare<br/>split_batches.py<br/>拉取仓库列表 → 分批"] -->
+    B["Job 2: mirror (矩阵并行)<br/>mirror_repos.py × N<br/>每批 clone → create → push"] -->
+    C["Job 3: aggregate<br/>合并 → diagnose → merge<br/>→ update README + commit results.json"]
+
+    A -.->|batches JSON| B
+    B -.->|Artifacts| C
+    C -.->|results.json| D["📊 公开可访问"]
+```
+
+> ⚠️ **为什么需要分批？** GitHub Actions 单个 job 有 6 小时限制。openEuler 有 824 个仓库，不分批必然会超时。矩阵策略将仓库分成每 80 个一批并行同步，彻底解决超时问题。
 
 
 ## 文件结构
@@ -188,7 +222,9 @@ GitHub、Gitee、Gitcode、GitLab。基于自研的 `mirror_repos.py`（从 hub-
 ```
 community-mirror/
 ├── README.md               ← 你在这里
-├── docs/setup-guide.md     ← 新社区接入教程
+├── docs/
+│   ├── setup-guide.md      ← 新社区接入教程
+│   └── architecture.html   ← 架构图 & 流程图（浏览器打开）
 ├── template/               ← 复制到你仓库就能用
 │   ├── repo-mirror.yml     ← 支持分批的 workflow 模板
 │   └── update_readme.py    ← 更新 README 同步状态的脚本

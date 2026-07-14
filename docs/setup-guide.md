@@ -62,7 +62,7 @@ account_type: org             # org / user / group
 
 ## Step 3: 注册你的社区
 
-向本仓库（`huanglei0308/community-mirror`）提一个 PR，在 `config/orgs.json` 中添加你的社区信息：
+向本仓库（`huanglei0308/community-mirror`）提一个 PR，在 `config/orgs.json` 中添加你的社区信息（注意 `main` 替换为你的默认分支名）：
 
 ```json
 {
@@ -71,7 +71,7 @@ account_type: org             # org / user / group
   "contact": "负责人 GitHub 账号",
   "source": "gitcode/my-org",
   "destination": "github/my-org-mirror",
-  "results_url": "https://YOUR_ORG.github.io/YOUR_REPO/results.json"
+  "results_url": "https://raw.githubusercontent.com/YOUR_ORG/YOUR_REPO/main/results.json"
 }
 ```
 
@@ -82,7 +82,7 @@ PR 合并后，你的社区就会出现在 [统一仪表盘](https://huanglei030
 ## 验证
 
 1. 手动触发你的 `repo-mirror` workflow
-2. 确认 workflow 跑完后 `https://<your-org>.github.io/<your-repo>/results.json` 可访问
+2. 确认 workflow 跑完后 `https://raw.githubusercontent.com/<your-org>/<your-repo>/main/results.json` 可访问
 3. 打开 [仪表盘](https://huanglei0308.github.io/community-mirror/) 确认你的社区已出现
 
 ---
@@ -91,7 +91,7 @@ PR 合并后，你的社区就会出现在 [统一仪表盘](https://huanglei030
 
 ### Q: 我的仓库是私有的，results.json 不想公开怎么办？
 
-目前仪表盘设计是基于公开 gh-pages URL。如果你的同步目标是公开仓库，results.json 只包含仓库名和计数，不包含源码，公开通常没有安全风险。
+目前仪表盘通过 raw.githubusercontent.com 读取各社区仓库中的 results.json。如果你的同步目标是公开仓库，results.json 只包含仓库名和计数，不包含源码，公开通常没有安全风险。
 
 ### Q: 我想自定义同步频率？
 
