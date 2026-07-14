@@ -196,7 +196,7 @@ function renderList(results) {
             ${stale ? '<span class="org-badge stale">STALE</span>' : ''}
           </span>
           <div class="org-meta">
-            ${r.contact ? `Contact: <a href="https://github.com/${escapeHtml(r.contact)}" target="_blank">@${escapeHtml(r.contact)}</a><br>` : ''}
+            ${r.contact ? `Contact: ${escapeHtml(r.contact)}<br>` : ''}
             ${fmtTime(d.timestamp)}
           </div>
         </div>
