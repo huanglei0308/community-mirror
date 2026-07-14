@@ -30,7 +30,7 @@
 <!-- COMMUNITY_TABLE_START -->
 | 社区 | 源 | 目的 | 负责人 | 状态 |
 |------|-----|------|--------|------|
-| openEuler | gitcode/openeuler | github/openeuler-mirror | @huanglei0308 | [查看](https://github.com/openeuler-mirror/sync-config#sync-status) |
+| openEuler | gitcode/openeuler | github/openeuler-mirror | @huanglei 30082796 | [查看](https://github.com/openeuler-mirror/sync-config#sync-status) |
 | Kunpeng+BoostKit | gitcode/kunpengcompute | github/kunpengcompute | @huanglei 30082796 | [查看](https://github.com/kunpengcompute/sync-config#sync-status) |
 <!-- COMMUNITY_TABLE_END -->
 
