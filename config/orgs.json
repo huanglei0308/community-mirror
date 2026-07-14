@@ -5,7 +5,7 @@
     {
       "org": "openEuler",
       "owner": "openeuler-mirror",
-      "contact": "huanglei0308",
+      "contact": "huanglei 30082796",
       "source": "gitcode/openeuler",
       "destination": "github/openeuler-mirror",
       "results_url": "https://raw.githubusercontent.com/openeuler-mirror/sync-config/master/results.json"
