@@ -1,0 +1,491 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Community Mirror — 架构图</title>
+<script src="https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.min.js"></script>
+<style>
+  :root {
+    --bg: #ffffff;
+    --card-bg: #f8f9fa;
+    --text: #1a1a2e;
+    --muted: #6b7280;
+    --border: #e5e7eb;
+    --accent: #2563eb;
+    --success: #059669;
+    --danger: #dc2626;
+    --warn: #d97706;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    line-height: 1.6;
+    padding: 20px;
+    max-width: 1400px;
+    margin: 0 auto;
+  }
+  header {
+    text-align: center;
+    padding: 40px 20px 30px;
+    border-bottom: 2px solid var(--border);
+    margin-bottom: 40px;
+  }
+  header h1 { font-size: 2rem; font-weight: 700; margin-bottom: 8px; }
+  header p { color: var(--muted); font-size: 1.05rem; }
+  .diagram-section {
+    background: var(--card-bg);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 30px;
+    margin-bottom: 36px;
+  }
+  .diagram-section h2 {
+    font-size: 1.3rem;
+    margin-bottom: 8px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+  .diagram-section h2 .num {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 28px; height: 28px;
+    background: var(--accent);
+    color: #fff;
+    border-radius: 50%;
+    font-size: 0.85rem;
+    font-weight: 700;
+    flex-shrink: 0;
+  }
+  .diagram-section .desc {
+    color: var(--muted);
+    margin-bottom: 20px;
+    font-size: 0.92rem;
+  }
+  .mermaid {
+    display: flex;
+    justify-content: center;
+    background: #fff;
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 20px;
+    overflow-x: auto;
+  }
+  .mermaid svg { max-width: 100%; height: auto; }
+  .toc {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 10px;
+    margin-bottom: 36px;
+    justify-content: center;
+  }
+  .toc a {
+    display: inline-block;
+    padding: 8px 16px;
+    background: var(--card-bg);
+    border: 1px solid var(--border);
+    border-radius: 20px;
+    text-decoration: none;
+    color: var(--accent);
+    font-size: 0.9rem;
+    font-weight: 500;
+    transition: all 0.15s;
+  }
+  .toc a:hover { background: var(--accent); color: #fff; border-color: var(--accent); }
+  footer {
+    text-align: center;
+    padding: 30px;
+    color: var(--muted);
+    font-size: 0.85rem;
+  }
+  @media (max-width: 768px) {
+    body { padding: 10px; }
+    .diagram-section { padding: 16px; }
+  }
+</style>
+</head>
+<body>
+
+<header>
+  <h1>🔄 Community Mirror — 架构与流程图</h1>
+  <p>跨社区开源仓库同步状态中心 · 由各社区自行运行同步，Hub 统一展示状态</p>
+</header>
+
+<nav class="toc">
+  <a href="#arch">系统架构</a>
+  <a href="#workflow">Workflow 全流程</a>
+  <a href="#dataflow">仪表盘数据流</a>
+  <a href="#mirror">单仓库同步</a>
+  <a href="#error">错误分类</a>
+  <a href="#components">组件关系</a>
+</nav>
+
+<!-- ================================================================ -->
+<section class="diagram-section" id="arch">
+  <h2><span class="num">1</span> 系统架构总览</h2>
+  <p class="desc">
+    Hub 层（本仓库）只做展示，不持有任何密钥。各社区自己运行同步 workflow，
+    结果以 <code>results.json</code> 形式部署到各自的 gh-pages。浏览器并行
+    fetch 所有社区的结果，纯前端渲染仪表盘。
+  </p>
+  <div class="mermaid">
+graph TB
+    subgraph HUB["🏠 Hub 层 — community-mirror (本仓库)"]
+        direction TB
+        CONFIG["📋 config/orgs.json<br/>社区注册表"]
+        DASHBOARD["📊 public/<br/>index.html + app.js + style.css<br/>纯静态仪表盘"]
+        DEPLOY["🚀 deploy-pages.yml<br/>定时更新 README + 部署 gh-pages"]
+    end
+
+    subgraph COMMUNITY_A["📦 社区 A — openeuler-mirror/sync-config"]
+        direction TB
+        WF_A[".github/workflows/repo-mirror.yml<br/>← 从 template/ 复制"]
+        SECRETS_A["🔐 GitHub Secrets<br/>SRC_TOKEN / DST_TOKEN / DST_PRIVATE_KEY"]
+        RP_A["📄 results.json<br/>部署到 gh-pages 公开访问"]
+        RM_A["📝 README.md<br/>自动更新同步状态表"]
+    end
+
+    subgraph COMMUNITY_B["📦 社区 B — kunpengcompute/sync-config"]
+        direction TB
+        WF_B[".github/workflows/repo-mirror.yml"]
+        SECRETS_B["🔐 GitHub Secrets"]
+        RP_B["📄 results.json<br/>部署到 gh-pages"]
+        RM_B["📝 README.md"]
+    end
+
+    subgraph SCRIPTS["📁 scripts/ — 所有社区复用"]
+        direction LR
+        S1["split_batches.py<br/>分批"]
+        S2["mirror_repos.py<br/>核心同步"]
+        S3["merge_results.py<br/>合并结果"]
+        S4["diagnose_failures.py<br/>诊断失败"]
+    end
+
+    subgraph EXTERNAL["🌐 外部平台"]
+        SRC["GitCode / Gitee<br/>(源)"]
+        DST["GitHub / GitLab<br/>(目的)"]
+    end
+
+    subgraph BROWSER["🖥️ 用户浏览器"]
+        APP["app.js<br/>并行 fetch 各社区 results.json<br/>纯前端渲染"]
+    end
+
+    CONFIG --> DEPLOY
+    DEPLOY --> DASHBOARD
+
+    WF_A -.->|"actions/checkout<br/>huanglei0308/community-mirror"| SCRIPTS
+    WF_B -.->|"actions/checkout<br/>huanglei0308/community-mirror"| SCRIPTS
+
+    WF_A --> SECRETS_A
+    WF_A --> RP_A
+    WF_A --> RM_A
+    WF_B --> SECRETS_B
+    WF_B --> RP_B
+    WF_B --> RM_B
+
+    S2 -->|"SSH clone"| SRC
+    S2 -->|"SSH push"| DST
+
+    APP -->|"fetch orgs.json"| CONFIG
+    APP -->|"fetch results.json"| RP_A
+    APP -->|"fetch results.json"| RP_B
+    APP --> DASHBOARD
+
+    style HUB fill:#eff6ff,stroke:#3b82f6
+    style COMMUNITY_A fill:#f0fdf4,stroke:#22c55e
+    style COMMUNITY_B fill:#fefce8,stroke:#eab308
+    style SCRIPTS fill:#faf5ff,stroke:#a855f7
+    style EXTERNAL fill:#fef2f2,stroke:#ef4444
+    style BROWSER fill:#f8fafc,stroke:#64748b
+  </div>
+</section>
+
+<!-- ================================================================ -->
+<section class="diagram-section" id="workflow">
+  <h2><span class="num">2</span> 单社区 Workflow 全流程（3 个 Job）</h2>
+  <p class="desc">
+    GitHub Actions workflow 的核心编排逻辑。Job 1 拉取仓库列表并切片；
+    Job 2 通过 matrix 策略并行同步各批次（突破 6 小时限制）；
+    Job 3 汇总结果、诊断失败、合并历史数据、部署到 gh-pages。
+  </p>
+  <div class="mermaid">
+flowchart TD
+    subgraph TRIGGER["触发方式"]
+        T1["⏰ 定时触发<br/>schedule: 0 1 * * *"]
+        T2["🖐️ 手动触发<br/>workflow_dispatch"]
+        T3["🔀 PR 触发<br/>workflow 文件变更时"]
+    end
+
+    T1 & T2 & T3 --> PREPARE
+
+    subgraph PREPARE["Job 1: prepare — 获取仓库列表并分批"]
+        direction TB
+        P1["Checkout community-mirror 脚本"] --> P2["pip install requests"]
+        P2 --> P3["<b>split_batches.py</b><br/>调用源平台 API 分页获取全部仓库"]
+        P3 --> P4["过滤 black_list"]
+        P4 --> P5["按 batch_size=80 切片"]
+        P5 --> P6["输出 batches JSON<br/>→ GITHUB_OUTPUT"]
+    end
+
+    P6 --> MATRIX
+
+    subgraph MATRIX["Job 2: mirror — 矩阵并行同步"]
+        direction TB
+        M0["GitHub Actions Matrix<br/>strategy.max-parallel: 自动"]
+        M0 --> M1["mirror-batch-0<br/>repos 0-79"]
+        M0 --> M2["mirror-batch-1<br/>repos 80-159"]
+        M0 --> M3["mirror-batch-N<br/>repos ..."]
+
+        M1 --> M1A["<b>mirror_repos.py</b><br/>逐个 clone → create → push"]
+        M2 --> M2A["<b>mirror_repos.py</b><br/>逐个 clone → create → push"]
+        M3 --> M3A["<b>mirror_repos.py</b><br/>逐个 clone → create → push"]
+
+        M1A --> M1B["Upload Artifact<br/>batch-results-0/batch_results.json"]
+        M2A --> M2B["Upload Artifact<br/>batch-results-1/batch_results.json"]
+        M3A --> M3B["Upload Artifact<br/>batch-results-N/batch_results.json"]
+    end
+
+    M1B & M2B & M3B --> AGG
+
+    subgraph AGG["Job 3: aggregate — 汇总 & 部署"]
+        direction TB
+        A1["Download 全部 Artifacts"] --> A2["<b>合并</b> batch_results.json<br/>→ results.json"]
+        A2 --> A3["<b>diagnose_failures.py</b><br/>对每个失败仓库执行诊断<br/>API 可达性 / 缓存状态"]
+        A3 --> A4["<b>merge_results.py</b><br/>合并 gh-pages 已有数据<br/>避免多 workflow 互相覆盖"]
+        A4 --> A5["<b>update_readme.py</b><br/>更新 README 同步状态表<br/>含错误分类摘要"]
+        A5 --> A6["Commit README 变更"]
+        A6 --> A7["<b>部署到 gh-pages</b><br/>results.json 公开可访问"]
+    end
+
+    A7 --> DONE["✅ 完成"]
+
+    style TRIGGER fill:#f8fafc,stroke:#94a3b8
+    style PREPARE fill:#eff6ff,stroke:#3b82f6
+    style MATRIX fill:#f0fdf4,stroke:#22c55e
+    style AGG fill:#fefce8,stroke:#eab308
+  </div>
+</section>
+
+<!-- ================================================================ -->
+<section class="diagram-section" id="dataflow">
+  <h2><span class="num">3</span> 仪表盘数据流（时序图）</h2>
+  <p class="desc">
+    Hub 不持有任何密钥，完全通过浏览器端并行 fetch 各社区公开的
+    <code>results.json</code> 来聚合展示。Hub 的 GitHub Pages 只部署静态文件。
+  </p>
+  <div class="mermaid">
+sequenceDiagram
+    participant User as 🖥️ 用户浏览器
+    participant Hub as 📊 Hub GitHub Pages<br/>huanglei0308.github.io/community-mirror
+    participant Raw as 📡 raw.githubusercontent.com
+    participant C1 as 📄 openEuler gh-pages<br/>openeuler-mirror.github.io/sync-config
+    participant C2 as 📄 Kunpeng gh-pages<br/>kunpengcompute.github.io/sync-config
+
+    User->>Hub: GET /
+    Hub-->>User: index.html + app.js + style.css
+
+    Note over User: app.js 开始执行
+
+    User->>Raw: GET huanglei0308/community-mirror/main/config/orgs.json
+    Raw-->>User: [{org: "openEuler", results_url: "..."}, {org: "Kunpeng+BoostKit", ...}]
+
+    Note over User: 遍历 orgs.json，并行 fetch 每个社区的 results.json
+
+    par 并行请求
+        User->>C1: GET results.json (无认证)
+        C1-->>User: {total:824, success:780, failed:44, ...}
+    and
+        User->>C2: GET results.json (无认证)
+        C2-->>User: {total:..., success:..., ...}
+    end
+
+    Note over User: 聚合数据 & 渲染仪表盘<br/>统计卡片 + 社区卡片 + 失败列表 + 过滤器
+
+    User->>User: ✅ 仪表盘渲染完成<br/>零后端 · 零 Token · 纯静态
+  </div>
+</section>
+
+<!-- ================================================================ -->
+<section class="diagram-section" id="mirror">
+  <h2><span class="num">4</span> mirror_repos.py 单仓库同步流程</h2>
+  <p class="desc">
+    核心同步脚本的内部流程：对每个仓库执行 "下载 → 创建目标 → 清除保护 → 推送" 四步，
+    失败时自动分类错误原因（大文件 / push protection / hook 拒绝 / 超时 等 9 种类型）。
+  </p>
+  <div class="mermaid">
+flowchart TD
+    START(["🚀 开始同步一个仓库<br/>repo_name"]) --> SSH["🔑 配置 SSH<br/>写入私钥 + ~/.ssh/config"]
+
+    SSH --> CHECK{"本地缓存<br/>hub-mirror-cache/<br/>repo.git 存在?"}
+
+    CHECK -->|"✅ 存在"| FETCH["git fetch --all --prune<br/>(增量更新)"]
+    CHECK -->|"❌ 不存在"| CLONE["git clone --mirror<br/>(全量克隆)"]
+
+    FETCH --> FETCH_OK{"fetch 成功?"}
+    FETCH_OK -->|"✅ 成功"| ENSURE
+    FETCH_OK -->|"❌ 失败"| RECLONE["删除缓存<br/>重新 clone --mirror"]
+
+    CLONE --> ENSURE["🔍 检查目标仓库是否存在"]
+    RECLONE --> ENSURE
+
+    ENSURE --> DST_EXISTS{"目标仓库<br/>存在?"}
+    DST_EXISTS -->|"❌ 不存在"| CREATE["📝 API 创建目标仓库<br/>POST repos/{name}"]
+    DST_EXISTS -->|"✅ 存在"| CLEAR
+    CREATE --> CLEAR
+
+    CLEAR{"--clear-branch-rules?"}
+    CLEAR -->|"✅ 是"| DEL_RULES["🗑️ 清除分支保护规则<br/>DELETE branches/{name}/protection"]
+    CLEAR -->|"❌ 否"| CHECK_EMPTY
+    DEL_RULES --> CHECK_EMPTY
+
+    CHECK_EMPTY["检查是否空仓库<br/>git rev-list -n 1 --all"]
+    CHECK_EMPTY --> EMPTY{"有 commit?"}
+    EMPTY -->|"❌ 空仓库"| SKIP["⏭️ 跳过推送"]
+    EMPTY -->|"✅ 有内容"| ADD_REMOTE["配置目标 remote<br/>remote set-url dst"]
+
+    ADD_REMOTE --> PUSH["📤 git push --force dst<br/>refs/heads/*:refs/heads/*<br/>refs/tags/*:refs/tags/*<br/>--prune"]
+
+    PUSH --> RESULT{"push 结果?"}
+
+    RESULT -->|"✅ 成功"| OK["✓ 记录到 success_list"]
+    RESULT -->|"❌ 失败"| CLASSIFY["🔍 _classify_error()<br/>匹配错误模式"]
+
+    SKIP --> OK
+
+    CLASSIFY --> CATEGORIES["错误分类输出"]
+
+    subgraph CATEGORIES_DETAIL["9 种错误分类"]
+        direction LR
+        E1["🔵 large_file<br/>>100MB 大文件"]
+        E2["🛡️ push_protection<br/>密钥泄露拦截"]
+        E3["🔒 hook_declined<br/>pre-receive 拒绝"]
+        E4["🚫 branch_delete<br/>默认分支保护"]
+        E5["⏳ rate_limited<br/>API 限流"]
+        E6["❓ repo_not_found<br/>源仓库不存在"]
+        E7["📥 clone_failed<br/>克隆失败"]
+        E8["⏱️ timeout<br/>操作超时"]
+        E9["❔ unknown<br/>未分类错误"]
+    end
+
+    CATEGORIES --> CATEGORIES_DETAIL
+    CATEGORIES_DETAIL --> FAIL["✗ 记录到 failed_list<br/>+ errors 字典"]
+
+    OK --> OUTPUT
+    FAIL --> OUTPUT
+
+    OUTPUT["📄 写入 results.json<br/>total/success/failed/skipped<br/>+ success_list/failed_list<br/>+ errors 对象"]
+
+    style START fill:#e0f2fe,stroke:#0284c7
+    style OK fill:#dcfce7,stroke:#16a34a
+    style FAIL fill:#fee2e2,stroke:#dc2626
+    style OUTPUT fill:#f8fafc,stroke:#64748b
+  </div>
+</section>
+
+<!-- ================================================================ -->
+<section class="diagram-section" id="error">
+  <h2><span class="num">5</span> 错误分类逻辑</h2>
+  <p class="desc">
+    <code>_classify_error()</code> 根据 git 输出的错误信息匹配 9 种已知错误类型，
+    提供可读的 category + message，便于在 README 和仪表盘上按类别展示失败统计。
+  </p>
+  <div class="mermaid">
+flowchart LR
+    INPUT["Exception<br/>stderr / str(exc)"] --> P1
+
+    subgraph MATCHING["模式匹配（顺序执行，先匹配先赢）"]
+        direction TB
+        P1{"含 'file size limit'<br/>或 'GH001 + large file'?"} -->|是| R1["large_file"]
+        P1 -->|否| P2{"含 'push protection'<br/>或 'GH013'?"} -->|是| R2["push_protection"]
+        P2 -->|否| P3{"含 'hook declined'?"} -->|是| R3["hook_declined"]
+        P3 -->|否| P4{"含 'refusing to delete'?"} -->|是| R4["branch_delete"]
+        P4 -->|否| P5{"含 'rate limit'?"} -->|是| R5["rate_limited"]
+        P5 -->|否| P6{"含 'not found'?"} -->|是| R6["repo_not_found"]
+        P6 -->|否| P7{"含 'clone failed'<br/>或 'could not read'?"} -->|是| R7["clone_failed"]
+        P7 -->|否| P8{"含 'timeout'?"} -->|是| R8["timeout"]
+        P8 -->|否| P9{"含 'fatal:' 行?"} -->|是| R9["push_failed"]
+        P9 -->|否| P10{"含 'rejected'?"} -->|是| R10["push_failed"]
+        P10 -->|否| P11{"含 'error:' 行?"} -->|是| R11["unknown"]
+        P11 -->|否| R12["unknown<br/>(原始错误类型名)"]
+    end
+
+    R1 & R2 & R3 & R4 & R5 & R6 & R7 & R8 & R9 & R10 & R11 & R12 --> OUTPUT
+    OUTPUT["{category, message}"]
+
+    style INPUT fill:#e0f2fe,stroke:#0284c7
+    style OUTPUT fill:#f8fafc,stroke:#64748b
+    style MATCHING fill:#fefce8,stroke:#eab308
+  </div>
+</section>
+
+<!-- ================================================================ -->
+<section class="diagram-section" id="components">
+  <h2><span class="num">6</span> 组件职责一览</h2>
+  <p class="desc">各脚本/文件的职责和上下游关系。</p>
+  <div class="mermaid">
+graph LR
+    subgraph INPUTS["输入"]
+        I1["🔐 SRC_TOKEN<br/>源平台 API Token"]
+        I2["🔐 DST_TOKEN<br/>目标平台 API Token"]
+        I3["🔑 DST_PRIVATE_KEY<br/>SSH 私钥"]
+        I4["📋 static_list /<br/>API 仓库列表"]
+    end
+
+    subgraph SCRIPTS["处理"]
+        direction TB
+        SC1["<b>split_batches.py</b><br/>分页拉取仓库列表<br/>过滤黑名单<br/>按 batch_size 切片<br/>→ batches JSON"]
+        SC2["<b>mirror_repos.py</b><br/>clone → create → push<br/>错误分类 9 种类型<br/>→ results.json"]
+        SC3["<b>diagnose_failures.py</b><br/>API 可达性检查<br/>缓存状态检查<br/>→ 丰富 diagnoses 字段"]
+        SC4["<b>merge_results.py</b><br/>合并 gh-pages 已有数据<br/>多 workflow 不互相覆盖<br/>→ merged results.json"]
+        SC5["<b>update_readme.py</b><br/>读取 results.json<br/>按类别生成失败摘要<br/>→ 更新 README.md"]
+    end
+
+    subgraph OUTPUTS["输出"]
+        O1["📄 results.json<br/>部署到 gh-pages"]
+        O2["📝 README.md<br/>仓库同步状态表"]
+        O3["📊 Hub 仪表盘<br/>聚合全社区状态"]
+    end
+
+    I1 & I2 & I3 & I4 --> SC1
+    SC1 --> SC2
+    SC2 --> SC3
+    SC3 --> SC4
+    SC4 --> SC5
+    SC5 --> O2
+    SC3 --> O1
+    SC4 --> O1
+    O1 --> O3
+
+    style INPUTS fill:#eff6ff,stroke:#3b82f6
+    style SCRIPTS fill:#faf5ff,stroke:#a855f7
+    style OUTPUTS fill:#f0fdf4,stroke:#22c55e
+  </div>
+</section>
+
+<footer>
+  <p>Community Mirror Hub · 跨社区开源仓库同步状态中心</p>
+  <p style="margin-top:4px">所有图表使用 Mermaid 渲染 · 可直接在浏览器中查看</p>
+</footer>
+
+<script>
+  mermaid.initialize({
+    startOnLoad: true,
+    theme: 'default',
+    securityLevel: 'loose',
+    flowchart: {
+      useMaxWidth: true,
+      htmlLabels: true,
+      curve: 'basis',
+    },
+    sequence: {
+      useMaxWidth: true,
+      wrap: true,
+    },
+  });
+</script>
+</body>
+</html>

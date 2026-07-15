@@ -210,11 +210,9 @@ jobs:
 
           git commit -m "Update sync status [skip ci]"
 
-          # Try push; if rejected, loop and retry
-          if git push origin "$BRANCH" 2>&1 | grep -q '[rejected]'; then
-            echo "Push rejected, retrying..."
-            git reset --soft HEAD~1
-          else
+          if git push origin "$BRANCH"; then
             break
           fi
+          echo "Push failed (attempt $attempt), retrying..."
+          git reset --soft HEAD~1
         done
