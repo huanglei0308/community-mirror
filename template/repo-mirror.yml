@@ -173,15 +173,39 @@ jobs:
     - name: Update README with sync status
       run: python update_readme.py
 
-    - name: Commit and push updated README
+    - name: Commit and push
       run: |
         git config user.name 'github-actions[bot]'
         git config user.email 'github-actions[bot]@users.noreply.github.com'
         git add README.md results.json
         if git diff --cached --quiet; then
           echo "No changes to commit"
-        else
-          git commit -m "Update sync status [skip ci]"
-          git pull --rebase
-          git push
+          exit 0
         fi
+
+        BRANCH=$(git rev-parse --abbrev-ref HEAD)
+        MERGE_URL="https://raw.githubusercontent.com/${{ github.repository }}/${BRANCH}/results.json"
+
+        for attempt in 1 2 3; do
+          git commit -m "Update sync status [skip ci]"
+
+          BEFORE=$(git rev-parse HEAD)
+          git pull --rebase origin "$BRANCH" || { echo "Rebase conflict"; break; }
+          AFTER=$(git rev-parse HEAD)
+
+          # If no new remote commits, we're done
+          if [ "$BEFORE" = "$AFTER" ]; then
+            break
+          fi
+
+          # Remote had changes — re-merge with latest results.json
+          echo "Remote changed, re-merging with latest results.json..."
+          python _mirror-hub/scripts/merge_results.py results.json \
+            --merge-url "$MERGE_URL" \
+            --output results.json
+          python update_readme.py
+          git add README.md results.json
+          git commit --amend --no-edit
+        done
+
+        git push origin "$BRANCH"
