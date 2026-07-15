@@ -181,35 +181,40 @@ jobs:
       run: |
         git config user.name 'github-actions[bot]'
         git config user.email 'github-actions[bot]@users.noreply.github.com'
-        git add README.md results.json
-        if git diff --cached --quiet; then
-          echo "No changes to commit"
-          exit 0
-        fi
 
         BRANCH=$(git rev-parse --abbrev-ref HEAD)
         MERGE_URL="https://raw.githubusercontent.com/${{ github.repository }}/${BRANCH}/results.json"
 
         for attempt in 1 2 3; do
-          git commit -m "Update sync status [skip ci]"
+          # Stash our changes, pull latest, then restore
+          git stash push -- README.md results.json 2>/dev/null || true
+          git pull --rebase origin "$BRANCH" || { echo "Pull failed"; git rebase --abort 2>/dev/null; break; }
+          git stash pop 2>/dev/null || true
 
-          BEFORE=$(git rev-parse HEAD)
-          git pull --rebase origin "$BRANCH" || { echo "Rebase conflict"; break; }
-          AFTER=$(git rev-parse HEAD)
+          # Resolve any conflict in generated files by re-merging with latest remote
+          git checkout --theirs results.json 2>/dev/null || true
+          git checkout --theirs README.md 2>/dev/null || true
+          git reset HEAD results.json README.md 2>/dev/null
+          git checkout -- results.json README.md 2>/dev/null || true
 
-          # If no new remote commits, we're done
-          if [ "$BEFORE" = "$AFTER" ]; then
-            break
-          fi
-
-          # Remote had changes — re-merge with latest results.json
-          echo "Remote changed, re-merging with latest results.json..."
           python _mirror-hub/scripts/merge_results.py results.json \
             --merge-url "$MERGE_URL" \
             --output results.json
           python update_readme.py
-          git add README.md results.json
-          git commit --amend --no-edit
-        done
 
-        git push origin "$BRANCH"
+          git add README.md results.json
+          if git diff --cached --quiet; then
+            echo "No changes to commit"
+            exit 0
+          fi
+
+          git commit -m "Update sync status [skip ci]"
+
+          # Try push; if rejected, loop and retry
+          if git push origin "$BRANCH" 2>&1 | grep -q '[rejected]'; then
+            echo "Push rejected, retrying..."
+            git reset --soft HEAD~1
+          else
+            break
+          fi
+        done
