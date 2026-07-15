@@ -69,6 +69,13 @@ md = f"""**Last updated:** {ts}
 
 """
 
+# ── Hub detail page link ──
+hub_community = os.environ.get("HUB_COMMUNITY", "")
+if hub_community:
+    from urllib.parse import quote
+    hub_url = f"https://huanglei0308.github.io/community-mirror/community.html?org={quote(hub_community)}"
+    md += f"📊 [查看详细同步状态（含失败原因诊断）]({hub_url})\n\n---\n\n"
+
 # ── Failure summary by category ──
 if category_counts:
     md += "### 📊 Failure Summary\n\n"
@@ -108,13 +115,6 @@ if failed_list:
 
     repo = os.environ.get("GITHUB_REPOSITORY", "owner/repo")
     md += f"[🔍 View workflow logs](https://github.com/{repo}/actions)\n\n"
-
-# ── Hub detail page link ──
-hub_community = os.environ.get("HUB_COMMUNITY", "")
-if hub_community:
-    from urllib.parse import quote
-    hub_url = f"https://huanglei0308.github.io/community-mirror/community.html?org={quote(hub_community)}"
-    md += f"📊 [查看详细同步状态]({hub_url})\n\n"
 
 # ── Skipped / Success (collapsed) ──
 if skipped_list:
