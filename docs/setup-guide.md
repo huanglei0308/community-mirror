@@ -2,19 +2,36 @@
 
 ## 前置条件
 
-- 一个 GitHub 仓库，用于存放 workflow 配置文件
-- 源平台和目标平台的账号及权限
-- SSH 密钥对（公钥配在目标平台，私钥作为 Secret）
+- 一个 GitHub 仓库（建议命名 `sync-config`），用于存放 workflow 配置文件
+- 源平台和目标平台的账号及 API Token
+- SSH 密钥对
 
-### 准备 Secrets
+### Step 0: 准备工作
 
-在你的 GitHub 仓库 **Settings → Secrets and variables → Actions** 中添加：
+**1. 配置 Secrets**
+
+在仓库 **Settings → Secrets and variables → Actions** 中添加：
 
 | Secret 名称 | 内容 | 说明 |
 |-------------|------|------|
 | `SRC_TOKEN` | 源平台 API Token | 用于获取仓库列表（Gitcode/Gitee 需要） |
 | `DST_TOKEN` | 目标平台 API Token | 用于在目标平台创建仓库 |
-| `DST_PRIVATE_KEY` | SSH 私钥 | 对应公钥需配置在目标平台上 |
+| `DST_PRIVATE_KEY` | SSH 私钥 | 对应公钥需配置在源和目标平台 |
+
+**2. 配置 SSH 公钥**
+
+```bash
+ssh-keygen -t rsa -b 4096 -f ~/.ssh/mirror-key -N ""
+```
+
+- **公钥**（`mirror-key.pub`）添加到：
+  - 源平台：Gitcode → 设置 → SSH 密钥、Gitee → 设置 → SSH 公钥
+  - 目标平台：GitHub → Settings → SSH and GPG keys
+- **私钥**（`mirror-key`）内容作为 `DST_PRIVATE_KEY` Secret
+
+**3. Actions 写权限**
+
+Settings → Actions → General → Workflow permissions → 选择 **"Read and write permissions"** → Save
 
 ---
 
@@ -68,7 +85,7 @@ account_type: org             # org / user / group
 {
   "org": "你的社区名",
   "owner": "GitHub 组织或用户名",
-  "contact": "负责人 GitHub 账号",
+  "contact": "负责人联系方式（如 Welink 工号）",
   "source": "gitcode/my-org",
   "destination": "github/my-org-mirror",
   "results_url": "https://raw.githubusercontent.com/YOUR_ORG/YOUR_REPO/main/results.json"
