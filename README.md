@@ -16,11 +16,11 @@
 ## 实时同步状态
 
 <!-- STATUS_TABLE_START -->
-**Overall:** ⚠️ **24 failed** | **2** communities | **151** repos
+**Overall:** ⚠️ **24 failed** | **2** communities | **152** repos
 
 | Community | Total | ✅ Synced | ❌ Failed | ⏭️ Skipped |
 |-----------|------:|----------:|----------:|-----------:|
-| ❓ openEuler | - | - | - | - |
+| ✅ openEuler | 1 | 1 | 0 | 0 |
 | ⚠️ Kunpeng+BoostKit | 151 | 127 | 24 | 0 |
 
 <!-- STATUS_TABLE_END -->
