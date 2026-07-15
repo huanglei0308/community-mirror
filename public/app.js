@@ -211,6 +211,8 @@ function renderList(results) {
             ${escapeHtml(d.src)} &#8594; ${escapeHtml(d.dst)}
             &nbsp;&middot;&nbsp;
             <a href="https://github.com/${escapeHtml(r.owner)}" target="_blank">GitHub</a>
+            &nbsp;&middot;&nbsp;
+            <a href="community.html?org=${encodeURIComponent(r.org)}">查看详情 →</a>
           </p>
           ${failedHtml}
           ${skippedHtml}
