@@ -186,18 +186,16 @@ jobs:
         MERGE_URL="https://raw.githubusercontent.com/${{ github.repository }}/${BRANCH}/results.json"
 
         for attempt in 1 2 3; do
-          # Stash our changes, pull latest, then restore
+          # Save our batch-merged results before stash/pull
+          cp results.json _our_results.json
+
+          # Stash changes, pull latest, then restore
           git stash push -- README.md results.json 2>/dev/null || true
           git pull --rebase origin "$BRANCH" || { echo "Pull failed"; git rebase --abort 2>/dev/null; break; }
           git stash pop 2>/dev/null || true
 
-          # Resolve any conflict in generated files by re-merging with latest remote
-          git checkout --theirs results.json 2>/dev/null || true
-          git checkout --theirs README.md 2>/dev/null || true
-          git reset HEAD results.json README.md 2>/dev/null
-          git checkout -- results.json README.md 2>/dev/null || true
-
-          python _mirror-hub/scripts/merge_results.py results.json \
+          # Always re-merge our batch results with latest remote
+          python _mirror-hub/scripts/merge_results.py _our_results.json \
             --merge-url "$MERGE_URL" \
             --output results.json
           python update_readme.py
