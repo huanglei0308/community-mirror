@@ -111,11 +111,14 @@ function render(community, data) {
   const failedSection = document.getElementById('failed-section');
   if (failedList.length > 0) {
     const rows = failedList.map(repo => {
-      const err = errors[repo] || '';
+      const rawErr = errors[repo] || '';
+      // errors may be a string or {category, message} object
+      const errMsg = typeof rawErr === 'object' && rawErr.message
+        ? rawErr.message : String(rawErr);
       const diag = (diagnoses[repo] || []).join('；');
       return `<tr>
         <td class="repo-name">${escapeHtml(repo)}</td>
-        <td class="err-msg">${escapeHtml(err)}</td>
+        <td class="err-msg">${escapeHtml(errMsg)}</td>
         <td class="diag-msg">${escapeHtml(diag)}</td>
       </tr>`;
     }).join('');
