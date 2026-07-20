@@ -49,16 +49,36 @@
     &#x26A0; Some community data may be stale (over 36 hours old). Communities might need to re-run their sync workflows.
   </div>
 
-  <!-- Filter tabs -->
+  <!-- Filter tabs + search -->
   <section class="filter-bar">
     <button class="filter-btn active" data-filter="all">All</button>
     <button class="filter-btn" data-filter="failed">&#x26A0; Has Failures</button>
     <button class="filter-btn" data-filter="ok">&#x2705; All Good</button>
+    <div class="search-box">
+      <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round">
+        <circle cx="7" cy="7" r="5"/><line x1="11" y1="11" x2="14.5" y2="14.5"/>
+      </svg>
+      <input type="search" id="search-input" placeholder="搜索社区…" aria-label="搜索社区">
+    </div>
   </section>
 
   <!-- Community cards -->
   <section id="community-list">
-    <div class="loading">Loading...</div>
+    <div class="skeleton-card">
+      <div class="skeleton-line" style="width:40%"></div>
+      <div class="skeleton-line" style="width:70%"></div>
+      <div class="skeleton-line" style="width:55%"></div>
+    </div>
+    <div class="skeleton-card">
+      <div class="skeleton-line" style="width:35%"></div>
+      <div class="skeleton-line" style="width:65%"></div>
+      <div class="skeleton-line" style="width:50%"></div>
+    </div>
+    <div class="skeleton-card">
+      <div class="skeleton-line" style="width:45%"></div>
+      <div class="skeleton-line" style="width:60%"></div>
+      <div class="skeleton-line" style="width:40%"></div>
+    </div>
   </section>
 
   <footer class="footer">
