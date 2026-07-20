@@ -6,40 +6,61 @@
   <title>Community Mirror Status</title>
   <link rel="stylesheet" href="style.css">
   <style>
-    .back-link { font-size: 13px; margin-bottom: 16px; display: inline-block; }
-    .back-link a { color: var(--muted); }
+    .back-link { margin-bottom: 18px; display: inline-block; }
+    .back-link a {
+      display: inline-flex; align-items: center; gap: 6px;
+      font-size: 13px; padding: 7px 15px;
+      border: 1px solid var(--border); border-radius: 999px;
+      background: var(--card-bg); color: var(--muted);
+      text-decoration: none; box-shadow: var(--shadow-sm);
+      transition: all .18s var(--ease);
+    }
+    .back-link a:hover { color: var(--info); border-color: var(--info); transform: translateY(-1px); box-shadow: var(--shadow-md); }
 
-    .meta-links { margin: 20px 0; display: flex; gap: 16px; flex-wrap: wrap; }
+    .meta-links { margin: 22px 0; display: flex; gap: 12px; flex-wrap: wrap; }
     .meta-links a {
       display: inline-flex; align-items: center; gap: 4px;
-      font-size: 13px; padding: 6px 14px;
-      border: 1px solid var(--border); border-radius: 20px;
+      font-size: 13px; padding: 7px 15px;
+      border: 1px solid var(--border); border-radius: 999px;
       background: var(--card-bg); color: var(--text);
-      text-decoration: none; transition: 0.15s;
+      text-decoration: none; box-shadow: var(--shadow-sm);
+      transition: all .18s var(--ease);
     }
-    .meta-links a:hover { background: var(--info-bg); border-color: var(--info); }
+    .meta-links a:hover { color: var(--info); border-color: var(--info); transform: translateY(-1px); box-shadow: var(--shadow-md); }
 
-    .fail-table { width: 100%; margin-top: 20px; border-collapse: collapse; font-size: 13px; }
-    .fail-table th {
-      text-align: left; padding: 8px 12px;
-      background: var(--danger-bg); color: var(--danger);
-      border-bottom: 2px solid var(--danger);
+    .table-wrap {
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      overflow: hidden;
+      margin-top: 12px;
+      background: var(--card-bg);
+      box-shadow: var(--shadow-sm);
     }
-    .fail-table td { padding: 10px 12px; border-bottom: 1px solid var(--border); }
-    .fail-table tr:hover { background: var(--bg); }
-    .fail-table .repo-name { font-family: ui-monospace, SFMono-Regular, monospace; font-weight: 600; }
+    .fail-table { width: 100%; border-collapse: collapse; font-size: 13px; }
+    .fail-table th {
+      text-align: left; padding: 12px 14px;
+      background: var(--danger-bg); color: var(--danger);
+      font-size: 11px; font-weight: 700; letter-spacing: .5px;
+      text-transform: uppercase;
+    }
+    .fail-table td { padding: 12px 14px; border-bottom: 1px solid var(--border); }
+    .fail-table tbody tr:last-child td { border-bottom: none; }
+    .fail-table tbody tr:hover { background: rgba(244, 246, 251, .7); }
+    .fail-table .repo-name { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-weight: 600; }
     .fail-table .err-msg { color: var(--danger); font-size: 12px; }
     .fail-table .diag-msg { color: var(--muted); font-size: 12px; }
 
-    .section-title { font-size: 15px; font-weight: 600; margin: 24px 0 10px; }
+    .section-title { font-size: 15px; font-weight: 600; margin: 28px 0 10px; }
 
     .progress-bar {
-      width: 100%; height: 8px; background: var(--border); border-radius: 4px;
-      margin-top: 12px; overflow: hidden; display: flex;
+      width: 100%; height: 10px; background: var(--bg);
+      border-radius: 999px; margin-top: 14px;
+      overflow: hidden; display: flex;
     }
+    .progress-bar span { transition: width .6s var(--ease); }
     .progress-bar .bar-success { background: var(--success); }
     .progress-bar .bar-failed  { background: var(--danger); }
-    .progress-bar .bar-skipped { background: var(--warn); }
+    .progress-bar .bar-skipped { background: #f59e0b; }
   </style>
 </head>
 <body>

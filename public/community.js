@@ -41,6 +41,21 @@ function platformUrl(platformSlug) {
   return bases[type] || null;
 }
 
+const REDUCED_MOTION = typeof window !== 'undefined' &&
+  window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+
+function animateNumber(el, target) {
+  if (REDUCED_MOTION || !target) { el.textContent = target; return; }
+  const duration = 650;
+  const start = performance.now();
+  function tick(now) {
+    const p = Math.min((now - start) / duration, 1);
+    el.textContent = Math.round(target * (1 - Math.pow(1 - p, 3)));
+    if (p < 1) requestAnimationFrame(tick);
+  }
+  requestAnimationFrame(tick);
+}
+
 // ── Render ─────────────────────────────────────────────
 
 function render(community, data) {
@@ -78,9 +93,11 @@ function render(community, data) {
     { cls: 'danger',  num: failed,  label: '同步失败' },
     { cls: 'warn',    num: skipped, label: '已跳过' },
   ];
-  document.getElementById('summary').innerHTML = cards.map(c =>
-    `<div class="card ${c.cls}"><div class="number">${c.num}</div><div class="label">${c.label}</div></div>`
+  const summaryEl = document.getElementById('summary');
+  summaryEl.innerHTML = cards.map(c =>
+    `<div class="card ${c.cls}"><div class="number" data-target="${c.num}">0</div><div class="label">${c.label}</div></div>`
   ).join('');
+  summaryEl.querySelectorAll('[data-target]').forEach(el => animateNumber(el, Number(el.dataset.target)));
 
   // Progress bar
   if (total > 0) {
@@ -124,7 +141,7 @@ function render(community, data) {
     }).join('');
     failedSection.innerHTML = `
       <div class="section-title">⚠️ 同步失败仓库（${failedList.length}）</div>
-      <div style="overflow-x:auto;">
+      <div class="table-wrap">
         <table class="fail-table">
           <thead><tr><th>仓库</th><th>错误信息</th><th>诊断结果</th></tr></thead>
           <tbody>${rows}</tbody>

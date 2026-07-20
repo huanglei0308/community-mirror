@@ -32,6 +32,22 @@ function escapeHtml(s) {
   return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
 }
 
+const REDUCED_MOTION = typeof window !== 'undefined' &&
+  window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+
+// Animate a number from 0 to target with an ease-out curve
+function animateNumber(el, target) {
+  if (REDUCED_MOTION || !target) { el.textContent = target; return; }
+  const duration = 650;
+  const start = performance.now();
+  function tick(now) {
+    const p = Math.min((now - start) / duration, 1);
+    el.textContent = Math.round(target * (1 - Math.pow(1 - p, 3)));
+    if (p < 1) requestAnimationFrame(tick);
+  }
+  requestAnimationFrame(tick);
+}
+
 // ── Fetch all data ─────────────────────────────────────
 
 async function fetchAll() {
@@ -88,11 +104,11 @@ function render(config, results) {
     if (d.timestamp && d.timestamp > latest) latest = d.timestamp;
   });
 
-  document.getElementById('total-orgs').textContent = totalOrgs;
-  document.getElementById('total-repos').textContent = totalRepos;
-  document.getElementById('total-success').textContent = totalSuccess;
-  document.getElementById('total-failed').textContent = totalFailed;
-  document.getElementById('total-skipped').textContent = totalSkipped;
+  animateNumber(document.getElementById('total-orgs'), totalOrgs);
+  animateNumber(document.getElementById('total-repos'), totalRepos);
+  animateNumber(document.getElementById('total-success'), totalSuccess);
+  animateNumber(document.getElementById('total-failed'), totalFailed);
+  animateNumber(document.getElementById('total-skipped'), totalSkipped);
   document.getElementById('last-refresh').textContent =
     latest ? `Latest data: ${fmtTime(latest)}` : '';
 
@@ -115,13 +131,13 @@ function renderList(results) {
     return;
   }
 
-  el.innerHTML = results.map((r) => {
+  el.innerHTML = results.map((r, i) => {
     const d = r.data;
 
     // Error / no data state
     if (!d) {
       return `
-        <div class="org-card stale">
+        <div class="org-card stale" data-status="stale" data-name="${escapeHtml(r.org.toLowerCase())}" style="animation-delay:${i * 45}ms">
           <div class="org-header">
             <span class="org-name">
               ${escapeHtml(r.org)}
@@ -155,6 +171,8 @@ function renderList(results) {
     const badgeCls = (!r.ok) ? 'stale' : (failed > 0 ? 'err' : 'ok');
     const badgeText= (!r.ok) ? 'ERROR'  : (failed > 0 ? 'HAS FAILURES' : 'ALL GOOD');
 
+    const pct = n => total ? (n / total * 100).toFixed(1) : 0;
+
     // Failed section
     let failedHtml = '';
     if (failedList.length) {
@@ -184,11 +202,8 @@ function renderList(results) {
         </details>`;
     }
 
-    const srcShort = (d.src || '').split('/').pop() || d.src || '';
-    const dstShort = (d.dst || '').split('/').pop() || d.dst || '';
-
     return `
-      <div class="org-card ${cardCls}" data-status="${cardCls}">
+      <div class="org-card ${cardCls}" data-status="${cardCls}" data-name="${escapeHtml(r.org.toLowerCase())}" style="animation-delay:${i * 45}ms">
         <div class="org-header">
           <span class="org-name">
             ${escapeHtml(r.org)}
@@ -207,6 +222,11 @@ function renderList(results) {
             <span><span class="dot y"></span> ${skipped} skipped</span>
             <span style="font-size:12px;color:var(--muted);">${total} total</span>
           </div>
+          <div class="mini-progress" title="成功 ${pct(success)}% / 失败 ${pct(failed)}% / 跳过 ${pct(skipped)}%">
+            <span class="mp-success" style="width:${pct(success)}%"></span>
+            <span class="mp-failed"  style="width:${pct(failed)}%"></span>
+            <span class="mp-skipped" style="width:${pct(skipped)}%"></span>
+          </div>
           <p class="org-flow">
             ${escapeHtml(d.src)} &#8594; ${escapeHtml(d.dst)}
             &nbsp;&middot;&nbsp;
@@ -221,19 +241,21 @@ function renderList(results) {
       </div>`;
   }).join('');
 
-  // Re-apply filter
-  applyFilter(document.querySelector('.filter-btn.active')?.dataset?.filter || 'all');
+  // Re-apply current filters
+  applyFilters();
 }
 
 // ── Filter ─────────────────────────────────────────────
 
-function applyFilter(filter) {
+let currentFilter = 'all';
+let currentSearch = '';
+
+function applyFilters() {
+  const q = currentSearch.trim().toLowerCase();
   document.querySelectorAll('.org-card').forEach(card => {
-    if (filter === 'all') {
-      card.style.display = '';
-    } else {
-      card.style.display = card.dataset.status === filter ? '' : 'none';
-    }
+    const statusMatch = currentFilter === 'all' || card.dataset.status === currentFilter;
+    const nameMatch = !q || (card.dataset.name || '').includes(q);
+    card.style.display = (statusMatch && nameMatch) ? '' : 'none';
   });
 }
 
@@ -243,9 +265,19 @@ document.addEventListener('DOMContentLoaded', () => {
     btn.addEventListener('click', () => {
       document.querySelectorAll('.filter-btn').forEach(b => b.classList.remove('active'));
       btn.classList.add('active');
-      applyFilter(btn.dataset.filter);
+      currentFilter = btn.dataset.filter;
+      applyFilters();
     });
   });
+
+  // Search box
+  const searchInput = document.getElementById('search-input');
+  if (searchInput) {
+    searchInput.addEventListener('input', (e) => {
+      currentSearch = e.target.value;
+      applyFilters();
+    });
+  }
 
   // Kick off
   fetchAll();
